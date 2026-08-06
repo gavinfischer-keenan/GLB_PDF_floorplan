@@ -149,6 +149,18 @@ export function exportPDF(options) {
       }
     }
 
+    // === Custom user text notes ===
+    if (floor.textNotes && floor.textNotes.length > 0) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(30, 41, 59);
+
+      for (const note of floor.textNotes) {
+        const pt = toPage(note.pos[0], note.pos[1]);
+        doc.text(note.text, pt.x, pt.y, { align: 'center' });
+      }
+    }
+
     // === Title Block ===
     const tbHeight = 20;
     const tbY = paper.height - tbHeight - 5;

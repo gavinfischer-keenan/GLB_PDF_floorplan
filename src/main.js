@@ -356,12 +356,16 @@ function initEditStep() {
 
     if (e.key === 'v') {
       selectTool('select');
+    } else if (e.key === 'h') {
+      selectTool('pan');
+    } else if (e.key === 't') {
+      selectTool('text');
     } else if (e.key === 'd') {
       selectTool('draw');
-    } else if (e.key === 'e') {
-      selectTool('erase');
     } else if (e.key === 'm') {
       selectTool('measure');
+    } else if (e.key === 'e') {
+      selectTool('erase');
     } else if (e.ctrlKey && e.key === 'z') {
       e.preventDefault();
       state.editor.undo();

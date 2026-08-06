@@ -1,7 +1,7 @@
 /**
  * FloorPlanEditor — SVG-based 2D floor plan editor
- * Renders walls, dimensions, and custom measurements as interactive SVG elements.
- * Supports pan, zoom, wall drawing, and interactive distance measuring.
+ * Renders walls, dimensions, custom measurements, and text notes.
+ * Supports Select, Pan (Hand), Text, Measure, Draw, Erase tools, and Undo/Redo.
  */
 import * as d3 from 'd3';
 import { distancePointToPoint } from './utils/geometry.js';
@@ -22,8 +22,12 @@ export class FloorPlanEditor {
     this.wallSegments = [];
     /** @type {Array<Object>} */
     this.measurements = [];
+    /** @type {Array<Object>} */
+    this.textNotes = [];
     /** @type {string} */
     this.currentTool = 'select';
+    /** @type {Object|null} */
+    this.selectedItem = null; // { type: 'measurement'|'text', data: Object }
 
     // Undo/redo
     this.undoStack = [];
@@ -45,10 +49,11 @@ export class FloorPlanEditor {
     // Main transform group (for zoom/pan)
     this.mainGroup = this.svg.append('g').attr('class', 'main-group');
 
-    // Layer order: grid → walls → dimensions → interaction
+    // Layer order: grid → walls → dimensions → labels → interaction
     this.gridLayer = this.mainGroup.append('g').attr('class', 'grid-layer');
     this.wallLayer = this.mainGroup.append('g').attr('class', 'wall-layer');
     this.dimensionLayer = this.mainGroup.append('g').attr('class', 'dimension-layer');
+    this.labelLayer = this.mainGroup.append('g').attr('class', 'label-layer');
     this.interactionLayer = this.mainGroup.append('g').attr('class', 'interaction-layer');
   }
 
@@ -59,10 +64,15 @@ export class FloorPlanEditor {
     this.zoom = d3.zoom()
       .scaleExtent([0.01, 1000])
       .filter((event) => {
-        // Allow wheel zoom in all modes; restrict click-drag zoom/pan to 'select' mode
-        if (this.currentTool === 'measure' || this.currentTool === 'draw') {
+        // Pan tool or spacebar or middle-click allows click-drag panning
+        if (this.currentTool === 'pan' || event.spaceKey || event.button === 1) {
+          return true;
+        }
+        // In measure, draw, or text modes, only allow wheel zoom
+        if (this.currentTool === 'measure' || this.currentTool === 'draw' || this.currentTool === 'text') {
           return event.type === 'wheel';
         }
+        // Select tool allows wheel zoom and background click-drag pan
         return !event.button;
       })
       .on('zoom', (event) => {
@@ -78,47 +88,105 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Set up interactive click-to-measure and click-to-draw
+   * Set up interactive tools (Select, Pan, Text, Measure, Draw, Erase)
    */
   _setupInteraction() {
     this._startPt = null;
     this._isMeasuring = false;
 
+    // Pointer down handler for tools
     this.svg.on('pointerdown', (event) => {
-      if (this.currentTool !== 'measure' && this.currentTool !== 'draw') return;
-      if (event.button !== 0) return; // left click only
+      if (event.button !== 0) return; // Left click only
 
-      const [wx, wy] = d3.pointer(event, this.mainGroup.node());
+      const target = d3.select(event.target);
 
-      if (!this._isMeasuring) {
-        // First click: start measurement / wall
-        this._isMeasuring = true;
-        this._startPt = [wx, wy];
-      } else {
-        // Second click: complete measurement / wall
-        const endPt = [wx, wy];
-        const dist = distancePointToPoint(this._startPt, endPt);
+      // Select Tool
+      if (this.currentTool === 'select') {
+        const itemType = target.attr('data-type');
+        const itemId = target.attr('data-id');
 
-        if (dist >= 0.05) {
-          this._pushUndo();
-          if (this.currentTool === 'measure') {
-            this.measurements.push({
-              p1: this._startPt,
-              p2: endPt,
-              text: `${dist.toFixed(2)}m`,
-            });
-          } else if (this.currentTool === 'draw') {
-            this.wallSegments.push([this._startPt, endPt]);
-          }
+        if (itemType === 'measurement' && itemId) {
+          event.stopPropagation();
+          const meas = this.measurements.find((m) => m.id === itemId);
+          this.selectedItem = meas ? { type: 'measurement', data: meas } : null;
+          this.render();
+        } else if (itemType === 'text' && itemId) {
+          event.stopPropagation();
+          const note = this.textNotes.find((n) => n.id === itemId);
+          this.selectedItem = note ? { type: 'text', data: note } : null;
+          this.render();
+        } else {
+          // Clicked background — deselect
+          this.selectedItem = null;
           this.render();
         }
+        return;
+      }
 
-        this._isMeasuring = false;
-        this._startPt = null;
-        this.interactionLayer.selectAll('*').remove();
+      // Erase Tool
+      if (this.currentTool === 'erase') {
+        const itemType = target.attr('data-type');
+        const itemId = target.attr('data-id');
+
+        if (itemType === 'measurement' && itemId) {
+          event.stopPropagation();
+          this._pushUndo();
+          this.measurements = this.measurements.filter((m) => m.id !== itemId);
+          this.selectedItem = null;
+          this.render();
+        } else if (itemType === 'text' && itemId) {
+          event.stopPropagation();
+          this._pushUndo();
+          this.textNotes = this.textNotes.filter((n) => n.id !== itemId);
+          this.selectedItem = null;
+          this.render();
+        }
+        return;
+      }
+
+      // Text Tool
+      if (this.currentTool === 'text') {
+        const [wx, wy] = d3.pointer(event, this.mainGroup.node());
+        this._showTextInput(event.clientX, event.clientY, [wx, wy]);
+        return;
+      }
+
+      // Measure or Draw Tools
+      if (this.currentTool === 'measure' || this.currentTool === 'draw') {
+        const [wx, wy] = d3.pointer(event, this.mainGroup.node());
+
+        if (!this._isMeasuring) {
+          // Start point
+          this._isMeasuring = true;
+          this._startPt = [wx, wy];
+        } else {
+          // End point
+          const endPt = [wx, wy];
+          const dist = distancePointToPoint(this._startPt, endPt);
+
+          if (dist >= 0.05) {
+            this._pushUndo();
+            if (this.currentTool === 'measure') {
+              this.measurements.push({
+                id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                p1: this._startPt,
+                p2: endPt,
+                text: `${dist.toFixed(2)}m`,
+              });
+            } else if (this.currentTool === 'draw') {
+              this.wallSegments.push([this._startPt, endPt]);
+            }
+            this.render();
+          }
+
+          this._isMeasuring = false;
+          this._startPt = null;
+          this.interactionLayer.selectAll('*').remove();
+        }
       }
     });
 
+    // Pointer move handler (for rubberband preview)
     this.svg.on('pointermove', (event) => {
       if (!this._isMeasuring || !this._startPt) return;
 
@@ -161,12 +229,92 @@ export class FloorPlanEditor {
       }
     });
 
-    // Escape key cancels active drawing
+    // Keyboard shortcuts (Delete / Backspace / Escape)
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this._isMeasuring) {
-        this._cancelInteraction();
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'Escape') {
+        if (this._isMeasuring) {
+          this._cancelInteraction();
+        } else if (this.selectedItem) {
+          this.selectedItem = null;
+          this.render();
+        }
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedItem) {
+        e.preventDefault();
+        this.deleteSelectedItem();
       }
     });
+  }
+
+  /**
+   * Show inline text input on canvas for adding custom text notes
+   */
+  _showTextInput(screenX, screenY, worldPos) {
+    // Remove existing input if any
+    d3.select('.canvas-text-input').remove();
+
+    const container = d3.select(this.svgElement.parentNode);
+    const rect = this.svgElement.getBoundingClientRect();
+    const relativeX = screenX - rect.left;
+    const relativeY = screenY - rect.top;
+
+    const input = container.append('input')
+      .attr('type', 'text')
+      .attr('class', 'canvas-text-input')
+      .attr('placeholder', 'Type text note...')
+      .style('left', `${relativeX}px`)
+      .style('top', `${relativeY}px`);
+
+    const node = input.node();
+    node.focus();
+
+    const commitText = () => {
+      const val = node.value.trim();
+      input.remove();
+      if (val) {
+        this._pushUndo();
+        this.textNotes.push({
+          id: `t_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          pos: worldPos,
+          text: val,
+        });
+        this.render();
+      }
+    };
+
+    input.on('keydown', (e) => {
+      if (e.key === 'Enter') {
+        commitText();
+      } else if (e.key === 'Escape') {
+        input.remove();
+      }
+    });
+
+    input.on('blur', () => {
+      commitText();
+    });
+  }
+
+  /**
+   * Delete currently selected item (measurement or text note)
+   */
+  deleteSelectedItem() {
+    if (!this.selectedItem) return;
+
+    this._pushUndo();
+    const { type, data } = this.selectedItem;
+
+    if (type === 'measurement') {
+      this.measurements = this.measurements.filter((m) => m.id !== data.id);
+    } else if (type === 'text') {
+      this.textNotes = this.textNotes.filter((n) => n.id !== data.id);
+    }
+
+    this.selectedItem = null;
+    this.render();
   }
 
   _cancelInteraction() {
@@ -196,6 +344,8 @@ export class FloorPlanEditor {
     const floor = this.floors[index];
     this.wallSegments = floor.segments || [];
     this.measurements = floor.measurements || [];
+    this.textNotes = floor.textNotes || [];
+    this.selectedItem = null;
     this.render();
     this.fitToView();
   }
@@ -207,6 +357,7 @@ export class FloorPlanEditor {
     this._renderGrid();
     this._renderWalls();
     this._renderDimensions();
+    this._renderTextNotes();
   }
 
   /**
@@ -282,30 +433,38 @@ export class FloorPlanEditor {
     // Bottom dimension (total width)
     this._drawDimension(
       [bounds.minX, bounds.maxY + offset], [bounds.maxX, bounds.maxY + offset],
-      `${width.toFixed(2)}m`, fontSize
+      `${width.toFixed(2)}m`, fontSize, null
     );
 
     // Right dimension (total height)
     this._drawDimension(
       [bounds.maxX + offset, bounds.minY], [bounds.maxX + offset, bounds.maxY],
-      `${height.toFixed(2)}m`, fontSize
+      `${height.toFixed(2)}m`, fontSize, null
     );
 
     // Draw custom user measurements
     for (const m of this.measurements) {
-      this._drawDimension(m.p1, m.p2, m.text, fontSize);
+      const isSelected = this.selectedItem?.type === 'measurement' && this.selectedItem?.data?.id === m.id;
+      this._drawDimension(m.p1, m.p2, m.text, fontSize, m.id, isSelected);
     }
   }
 
   /**
    * Draw a single dimension line with tick marks and text
    */
-  _drawDimension(p1, p2, text, fontSize = 0.18) {
-    const group = this.dimensionLayer.append('g').attr('class', 'dimension-group');
+  _drawDimension(p1, p2, text, fontSize = 0.18, id = null, isSelected = false) {
+    const group = this.dimensionLayer.append('g')
+      .attr('class', `dimension-group${isSelected ? ' selected' : ''}`);
+
+    if (id) {
+      group.attr('data-type', 'measurement').attr('data-id', id);
+    }
 
     // Main line
     group.append('line')
       .attr('class', 'dimension-line')
+      .attr('data-type', id ? 'measurement' : null)
+      .attr('data-id', id || null)
       .attr('x1', p1[0]).attr('y1', p1[1])
       .attr('x2', p2[0]).attr('y2', p2[1]);
 
@@ -322,12 +481,16 @@ export class FloorPlanEditor {
     // Start tick
     group.append('line')
       .attr('class', 'dimension-line')
+      .attr('data-type', id ? 'measurement' : null)
+      .attr('data-id', id || null)
       .attr('x1', p1[0] - nx).attr('y1', p1[1] - ny)
       .attr('x2', p1[0] + nx).attr('y2', p1[1] + ny);
 
     // End tick
     group.append('line')
       .attr('class', 'dimension-line')
+      .attr('data-type', id ? 'measurement' : null)
+      .attr('data-id', id || null)
       .attr('x1', p2[0] - nx).attr('y1', p2[1] - ny)
       .attr('x2', p2[0] + nx).attr('y2', p2[1] + ny);
 
@@ -336,6 +499,8 @@ export class FloorPlanEditor {
     const midY = (p1[1] + p2[1]) / 2;
     group.append('text')
       .attr('class', 'dimension-text')
+      .attr('data-type', id ? 'measurement' : null)
+      .attr('data-id', id || null)
       .attr('x', midX + nx * 2.2)
       .attr('y', midY + ny * 2.2)
       .attr('font-size', fontSize)
@@ -343,8 +508,32 @@ export class FloorPlanEditor {
   }
 
   /**
+   * Render custom user text notes
+   */
+  _renderTextNotes() {
+    this.labelLayer.selectAll('*').remove();
+
+    const bounds = this._getBounds() || { minX: 0, maxX: 10, minY: 0, maxY: 10 };
+    const minDim = Math.min(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) || 5;
+    const fontSize = Math.max(0.14, Math.min(0.4, minDim * 0.07));
+
+    for (const note of this.textNotes) {
+      const isSelected = this.selectedItem?.type === 'text' && this.selectedItem?.data?.id === note.id;
+
+      this.labelLayer.append('text')
+        .attr('class', `text-note${isSelected ? ' selected' : ''}`)
+        .attr('data-type', 'text')
+        .attr('data-id', note.id)
+        .attr('x', note.pos[0])
+        .attr('y', note.pos[1])
+        .attr('font-size', fontSize)
+        .text(note.text);
+    }
+  }
+
+  /**
    * Set the current tool
-   * @param {string} tool - 'select' | 'draw' | 'erase' | 'measure'
+   * @param {string} tool - 'select' | 'pan' | 'text' | 'draw' | 'measure' | 'erase'
    */
   setTool(tool) {
     this.currentTool = tool;
@@ -353,9 +542,11 @@ export class FloorPlanEditor {
     // Adjust cursor
     const cursors = {
       select: 'default',
+      pan: 'grab',
+      text: 'text',
       draw: 'crosshair',
-      erase: 'pointer',
       measure: 'crosshair',
+      erase: 'pointer',
     };
     this.svgElement.style.cursor = cursors[tool] || 'default';
   }
@@ -412,6 +603,7 @@ export class FloorPlanEditor {
   _pushUndo() {
     this.undoStack.push({
       measurements: JSON.parse(JSON.stringify(this.measurements)),
+      textNotes: JSON.parse(JSON.stringify(this.textNotes)),
       wallSegments: JSON.parse(JSON.stringify(this.wallSegments)),
     });
     this.redoStack = [];
@@ -427,11 +619,14 @@ export class FloorPlanEditor {
     if (this.undoStack.length === 0) return false;
     this.redoStack.push({
       measurements: JSON.parse(JSON.stringify(this.measurements)),
+      textNotes: JSON.parse(JSON.stringify(this.textNotes)),
       wallSegments: JSON.parse(JSON.stringify(this.wallSegments)),
     });
     const state = this.undoStack.pop();
     this.measurements = state.measurements || [];
+    this.textNotes = state.textNotes || [];
     this.wallSegments = state.wallSegments;
+    this.selectedItem = null;
     this.render();
     return true;
   }
@@ -443,11 +638,14 @@ export class FloorPlanEditor {
     if (this.redoStack.length === 0) return false;
     this.undoStack.push({
       measurements: JSON.parse(JSON.stringify(this.measurements)),
+      textNotes: JSON.parse(JSON.stringify(this.textNotes)),
       wallSegments: JSON.parse(JSON.stringify(this.wallSegments)),
     });
     const state = this.redoStack.pop();
     this.measurements = state.measurements || [];
+    this.textNotes = state.textNotes || [];
     this.wallSegments = state.wallSegments;
+    this.selectedItem = null;
     this.render();
     return true;
   }
@@ -478,6 +676,14 @@ export class FloorPlanEditor {
       hasData = true;
     }
 
+    for (const n of this.textNotes) {
+      minX = Math.min(minX, n.pos[0]);
+      minY = Math.min(minY, n.pos[1]);
+      maxX = Math.max(maxX, n.pos[0]);
+      maxY = Math.max(maxY, n.pos[1]);
+      hasData = true;
+    }
+
     return hasData ? { minX, minY, maxX, maxY } : null;
   }
 
@@ -495,6 +701,7 @@ export class FloorPlanEditor {
     return {
       walls: this.wallSegments,
       measurements: this.measurements,
+      textNotes: this.textNotes,
       bounds: this._getBounds(),
     };
   }
