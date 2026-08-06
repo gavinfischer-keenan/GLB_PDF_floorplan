@@ -30,6 +30,7 @@ FloorPlan Extractor is a web-based, client-side tool designed to automatically e
 - **3D Engine**: [Three.js](https://threejs.org/) & [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh)
 - **Vector Graphics & UI Interaction**: [D3.js](https://d3js.org/)
 - **PDF Generation**: [jsPDF](https://github.com/parallax/jsPDF) & [svg2pdf.js](https://github.com/yWorks/svg2pdf.js/)
+- **Testing**: [Vitest](https://vitest.dev/)
 - **Styling**: Vanilla CSS with modern custom properties (CSS variables).
 
 ---
@@ -68,4 +69,12 @@ To preview the production build locally:
 
 ```bash
 npm run preview
+```
+
+### Running Tests
+
+Run the automated Vitest test suite:
+
+```bash
+npm run test
 ```
