@@ -101,106 +101,35 @@ export function exportPDF(options) {
       doc.line(p1.x, p1.y, p2.x, p2.y);
     }
 
-    // === Draw room fills (very light gray) ===
-    doc.setFillColor(245, 245, 245);
-    for (const room of rooms) {
-      if (!room.polygon || room.polygon.length < 3) continue;
-      const points = room.polygon.map((p) => {
-        const pp = toPage(p[0], p[1]);
-        return [pp.x, pp.y];
-      });
-      // Draw filled polygon
-      doc.setDrawColor(180, 180, 180);
-      doc.setLineWidth(0.15);
-
-      // jsPDF polygon drawing
-      const startPoint = points[0];
-      doc.moveTo(startPoint[0], startPoint[1]);
-      for (let j = 1; j < points.length; j++) {
-        doc.lineTo(points[j][0], points[j][1]);
-      }
-      doc.lineTo(startPoint[0], startPoint[1]);
-      doc.fill();
-    }
-
-    // Re-draw walls on top of room fills
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.6);
-    for (const seg of walls) {
-      const p1 = toPage(seg[0][0], seg[0][1]);
-      const p2 = toPage(seg[1][0], seg[1][1]);
-      doc.line(p1.x, p1.y, p2.x, p2.y);
-    }
-
-    // === Room labels ===
-    doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'normal');
-
-    for (const room of rooms) {
-      if (!room.centroid) continue;
-      const center = toPage(room.centroid[0], room.centroid[1]);
-
-      // Room name
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      const name = room.name || 'Room';
-      doc.text(name, center.x, center.y - 2, { align: 'center' });
-
-      // Room area
-      doc.setFontSize(6);
-      doc.setFont('helvetica', 'normal');
-      const areaText = `${Math.abs(room.area).toFixed(1)} m²`;
-      doc.text(areaText, center.x, center.y + 2, { align: 'center' });
-    }
-
-    // === Dimension lines for each room ===
+    // === Overall dimension lines ===
     doc.setDrawColor(100, 100, 100);
     doc.setLineWidth(0.15);
     doc.setFontSize(5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(80, 80, 80);
 
-    for (const room of rooms) {
-      if (!room.polygon || room.polygon.length < 3) continue;
+    const totalW = dataWidth;
+    const totalH = dataHeight;
+    const dimOffset = 0.3; // meters offset from edges
+    const tickH = 1; // mm
 
-      // Compute room bounding box
-      let rMinX = Infinity, rMinY = Infinity, rMaxX = -Infinity, rMaxY = -Infinity;
-      for (const p of room.polygon) {
-        rMinX = Math.min(rMinX, p[0]);
-        rMinY = Math.min(rMinY, p[1]);
-        rMaxX = Math.max(rMaxX, p[0]);
-        rMaxY = Math.max(rMaxY, p[1]);
-      }
+    // Bottom dimension (total width)
+    const wP1 = toPage(bounds.minX, bounds.maxY + dimOffset);
+    const wP2 = toPage(bounds.maxX, bounds.maxY + dimOffset);
+    doc.line(wP1.x, wP1.y, wP2.x, wP2.y);
+    doc.line(wP1.x, wP1.y - tickH, wP1.x, wP1.y + tickH);
+    doc.line(wP2.x, wP2.y - tickH, wP2.x, wP2.y + tickH);
+    const wMid = toPage((bounds.minX + bounds.maxX) / 2, bounds.maxY + dimOffset);
+    doc.text(`${totalW.toFixed(2)}m`, wMid.x, wMid.y + 3, { align: 'center' });
 
-      const w = rMaxX - rMinX;
-      const h = rMaxY - rMinY;
-
-      // Only show dimensions for rooms > 3m²
-      if (Math.abs(room.area) < 3) continue;
-
-      const dimOffset = 0.15; // meters offset from room edge
-
-      // Width dimension (bottom)
-      const wP1 = toPage(rMinX, rMaxY + dimOffset);
-      const wP2 = toPage(rMaxX, rMaxY + dimOffset);
-      doc.line(wP1.x, wP1.y, wP2.x, wP2.y);
-      // Tick marks
-      const tickH = 1; // mm
-      doc.line(wP1.x, wP1.y - tickH, wP1.x, wP1.y + tickH);
-      doc.line(wP2.x, wP2.y - tickH, wP2.x, wP2.y + tickH);
-      // Text
-      const wMid = toPage((rMinX + rMaxX) / 2, rMaxY + dimOffset);
-      doc.text(`${w.toFixed(2)}m`, wMid.x, wMid.y + 3, { align: 'center' });
-
-      // Height dimension (right)
-      const hP1 = toPage(rMaxX + dimOffset, rMinY);
-      const hP2 = toPage(rMaxX + dimOffset, rMaxY);
-      doc.line(hP1.x, hP1.y, hP2.x, hP2.y);
-      doc.line(hP1.x - tickH, hP1.y, hP1.x + tickH, hP1.y);
-      doc.line(hP2.x - tickH, hP2.y, hP2.x + tickH, hP2.y);
-      const hMid = toPage(rMaxX + dimOffset, (rMinY + rMaxY) / 2);
-      doc.text(`${h.toFixed(2)}m`, hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
-    }
+    // Right dimension (total height)
+    const hP1 = toPage(bounds.maxX + dimOffset, bounds.minY);
+    const hP2 = toPage(bounds.maxX + dimOffset, bounds.maxY);
+    doc.line(hP1.x, hP1.y, hP2.x, hP2.y);
+    doc.line(hP1.x - tickH, hP1.y, hP1.x + tickH, hP1.y);
+    doc.line(hP2.x - tickH, hP2.y, hP2.x + tickH, hP2.y);
+    const hMid = toPage(bounds.maxX + dimOffset, (bounds.minY + bounds.maxY) / 2);
+    doc.text(`${totalH.toFixed(2)}m`, hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
 
     // === Title Block ===
     const tbHeight = 20;

@@ -146,9 +146,6 @@
               <button class="btn btn-tool active" data-tool="select" title="Select (V)">
                 <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2l12 8.5L10 12l-2 6z"/></svg>
               </button>
-              <button class="btn btn-tool" data-tool="label" title="Label Room (L)">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="16" height="12" rx="1"/><path d="M6 10h8M6 13h5"/></svg>
-              </button>
               <button class="btn btn-tool" data-tool="draw" title="Draw Wall (D)">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17L17 3M14 3h3v3"/></svg>
               </button>
@@ -184,39 +181,7 @@
           <div class="editor-canvas" id="editor-canvas">
             <svg id="floor-plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
           </div>
-          <div class="editor-side-panel" id="editor-side-panel">
-            <h3>Room Properties</h3>
-            <div class="room-editor" id="room-editor" hidden>
-              <label class="form-label">Room Name</label>
-              <input type="text" class="form-input" id="room-name-input" placeholder="e.g., Living Room" />
-              <label class="form-label">Room Type</label>
-              <select class="form-select" id="room-type-select">
-                <option value="room">Room</option>
-                <option value="bedroom">Bedroom</option>
-                <option value="bathroom">Bathroom</option>
-                <option value="kitchen">Kitchen</option>
-                <option value="living">Living Room</option>
-                <option value="dining">Dining Room</option>
-                <option value="office">Office</option>
-                <option value="hallway">Hallway</option>
-                <option value="closet">Closet</option>
-                <option value="laundry">Laundry</option>
-                <option value="garage">Garage</option>
-                <option value="other">Other</option>
-              </select>
-              <div class="room-stats">
-                <div class="stat"><span class="stat-label">Area</span><span class="stat-value" id="room-area">—</span></div>
-                <div class="stat"><span class="stat-label">Perimeter</span><span class="stat-value" id="room-perimeter">—</span></div>
-              </div>
-              <button class="btn btn-danger btn-sm" id="btn-delete-room">Delete Room</button>
-            </div>
-            <div class="room-list-panel" id="room-list-panel">
-              <h4>All Rooms</h4>
-              <ul class="room-list" id="room-list-editor">
-                <!-- Populated dynamically -->
-              </ul>
-            </div>
-          </div>
+
           <div class="editor-bottom-bar">
             <button class="btn btn-secondary" id="btn-back-to-floors">Back</button>
             <div class="editor-zoom">
@@ -286,33 +251,7 @@
       </div>
     </div>
 
-    <!-- Label Dialog -->
-    <div class="modal-overlay" id="label-modal" hidden>
-      <div class="modal">
-        <h3 class="modal-title">Label Room</h3>
-        <label class="form-label">Room Name</label>
-        <input type="text" class="form-input" id="label-input" placeholder="e.g., Bedroom 1" />
-        <label class="form-label">Room Type</label>
-        <select class="form-select" id="label-type-select">
-          <option value="room">Room</option>
-          <option value="bedroom">Bedroom</option>
-          <option value="bathroom">Bathroom</option>
-          <option value="kitchen">Kitchen</option>
-          <option value="living">Living Room</option>
-          <option value="dining">Dining Room</option>
-          <option value="office">Office</option>
-          <option value="hallway">Hallway</option>
-          <option value="closet">Closet</option>
-          <option value="laundry">Laundry</option>
-          <option value="garage">Garage</option>
-          <option value="other">Other</option>
-        </select>
-        <div class="modal-actions">
-          <button class="btn btn-secondary" id="btn-label-cancel">Cancel</button>
-          <button class="btn btn-primary" id="btn-label-save">Save</button>
-        </div>
-      </div>
-    </div>
+
   </div>
 
   <script type="module" src="/src/main.js"></script>

@@ -334,16 +334,8 @@ function initEditStep() {
     state.editor = new FloorPlanEditor(svgElement);
 
     // Wire up callbacks
-    state.editor.onRoomSelected = (room) => {
-      updateRoomEditor(room);
-    };
-
     state.editor.onZoomChanged = (pct) => {
       $('#zoom-level').textContent = `${pct}%`;
-    };
-
-    state.editor.onRoomUpdated = () => {
-      updateRoomList();
     };
   }
 
@@ -369,7 +361,6 @@ function initEditStep() {
       tabContainer.querySelectorAll('.floor-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       state.editor.switchFloor(i);
-      updateRoomList();
     });
     tabContainer.appendChild(tab);
   });
@@ -384,14 +375,8 @@ function initEditStep() {
   });
 
   // Undo/Redo
-  $('#btn-undo').onclick = () => {
-    state.editor.undo();
-    updateRoomList();
-  };
-  $('#btn-redo').onclick = () => {
-    state.editor.redo();
-    updateRoomList();
-  };
+  $('#btn-undo').onclick = () => state.editor.undo();
+  $('#btn-redo').onclick = () => state.editor.redo();
 
   // Zoom controls
   $('#btn-zoom-in').onclick = () => state.editor.zoomIn();
@@ -437,38 +422,11 @@ function initEditStep() {
 
     state.editor.setFloorData(state.floorPlans);
     state.editor.switchFloor(floorIdx);
-    updateRoomList();
   });
-
-  // Room name/type inputs
-  $('#room-name-input').addEventListener('change', (e) => {
-    if (state.editor.selectedRoom) {
-      state.editor.updateRoom(state.editor.selectedRoom, { name: e.target.value });
-      updateRoomList();
-    }
-  });
-
-  $('#room-type-select').addEventListener('change', (e) => {
-    if (state.editor.selectedRoom) {
-      state.editor.updateRoom(state.editor.selectedRoom, { type: e.target.value });
-    }
-  });
-
-  // Delete room button
-  $('#btn-delete-room').onclick = () => {
-    if (state.editor.selectedRoom) {
-      state.editor.deleteRoom(state.editor.selectedRoom);
-      updateRoomEditor(null);
-      updateRoomList();
-    }
-  };
 
   // Navigation
   $('#btn-back-to-floors').onclick = () => goToStep(3);
   $('#btn-export').onclick = () => goToStep(5);
-
-  // Populate room list
-  updateRoomList();
 
   // Keyboard shortcuts
   document.onkeydown = (e) => {
@@ -477,8 +435,6 @@ function initEditStep() {
 
     if (e.key === 'v') {
       selectTool('select');
-    } else if (e.key === 'l') {
-      selectTool('label');
     } else if (e.key === 'd') {
       selectTool('draw');
     } else if (e.key === 'e') {
@@ -488,11 +444,9 @@ function initEditStep() {
     } else if (e.ctrlKey && e.key === 'z') {
       e.preventDefault();
       state.editor.undo();
-      updateRoomList();
     } else if (e.ctrlKey && e.key === 'y') {
       e.preventDefault();
       state.editor.redo();
-      updateRoomList();
     }
   };
 }
@@ -503,38 +457,7 @@ function selectTool(tool) {
   state.editor?.setTool(tool);
 }
 
-function updateRoomEditor(room) {
-  const panel = $('#room-editor');
-  if (room) {
-    panel.hidden = false;
-    $('#room-name-input').value = room.name || '';
-    $('#room-type-select').value = room.type || 'room';
-    $('#room-area').textContent = `${Math.abs(room.area).toFixed(1)} m²`;
-    $('#room-perimeter').textContent = `${room.perimeter.toFixed(1)} m`;
-  } else {
-    panel.hidden = true;
-  }
-}
 
-function updateRoomList() {
-  const list = $('#room-list-editor');
-  list.innerHTML = '';
-
-  const currentFloor = state.floorPlans[state.editor?.activeFloorIndex || 0];
-  if (!currentFloor) return;
-
-  for (const room of currentFloor.rooms) {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <span>${room.name || 'Room'}</span>
-      <span class="room-area-badge">${Math.abs(room.area).toFixed(1)} m²</span>
-    `;
-    li.addEventListener('click', () => {
-      state.editor._selectRoom(room);
-    });
-    list.appendChild(li);
-  }
-}
 
 // ============================================================
 // Step 5: Export PDF

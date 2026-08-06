@@ -110,10 +110,8 @@ export class FloorPlanEditor {
    */
   render() {
     this._renderGrid();
-    this._renderRooms();
     this._renderWalls();
     this._renderDimensions();
-    this._renderLabels();
   }
 
   /**
@@ -200,42 +198,29 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Render room dimension lines for selected room or all rooms
+   * Render overall floor plan dimension lines
    */
   _renderDimensions() {
     this.dimensionLayer.selectAll('*').remove();
 
-    for (const room of this.rooms) {
-      if (!room.polygon || room.polygon.length < 3) continue;
+    const bounds = this._getBounds();
+    if (!bounds) return;
 
-      // Compute bounding box of room
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const p of room.polygon) {
-        minX = Math.min(minX, p[0]);
-        minY = Math.min(minY, p[1]);
-        maxX = Math.max(maxX, p[0]);
-        maxY = Math.max(maxY, p[1]);
-      }
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxY - bounds.minY;
+    const offset = 0.5; // Offset dimension lines from the plan edges
 
-      const width = maxX - minX;
-      const height = maxY - minY;
-      const offset = 0.3; // Offset dimension lines from the room
+    // Bottom dimension (total width)
+    this._drawDimension(
+      [bounds.minX, bounds.maxY + offset], [bounds.maxX, bounds.maxY + offset],
+      `${width.toFixed(2)}m`
+    );
 
-      // Only show dimensions for selected room to avoid clutter
-      if (room !== this.selectedRoom) continue;
-
-      // Bottom dimension (width)
-      this._drawDimension(
-        [minX, maxY + offset], [maxX, maxY + offset],
-        `${width.toFixed(2)}m`
-      );
-
-      // Right dimension (height)
-      this._drawDimension(
-        [maxX + offset, minY], [maxX + offset, maxY],
-        `${height.toFixed(2)}m`
-      );
-    }
+    // Right dimension (total height)
+    this._drawDimension(
+      [bounds.maxX + offset, bounds.minY], [bounds.maxX + offset, bounds.maxY],
+      `${height.toFixed(2)}m`
+    );
   }
 
   /**
