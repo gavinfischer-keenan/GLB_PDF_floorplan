@@ -3,6 +3,7 @@
  * Uses jsPDF for traditional black/white architectural drawing output.
  */
 import { jsPDF } from 'jspdf';
+import { formatFeetInches } from './utils/geometry.js';
 
 /** Paper sizes in mm */
 const PAPER_SIZES = {
@@ -120,7 +121,7 @@ export function exportPDF(options) {
     doc.line(wP1.x, wP1.y - tickH, wP1.x, wP1.y + tickH);
     doc.line(wP2.x, wP2.y - tickH, wP2.x, wP2.y + tickH);
     const wMid = toPage((bounds.minX + bounds.maxX) / 2, bounds.maxY + dimOffset);
-    doc.text(`${totalW.toFixed(2)}m`, wMid.x, wMid.y + 3, { align: 'center' });
+    doc.text(formatFeetInches(totalW), wMid.x, wMid.y + 3, { align: 'center' });
 
     // Right dimension (total height)
     const hP1 = toPage(bounds.maxX + dimOffset, bounds.minY);
@@ -129,7 +130,7 @@ export function exportPDF(options) {
     doc.line(hP1.x - tickH, hP1.y, hP1.x + tickH, hP1.y);
     doc.line(hP2.x - tickH, hP2.y, hP2.x + tickH, hP2.y);
     const hMid = toPage(bounds.maxX + dimOffset, (bounds.minY + bounds.maxY) / 2);
-    doc.text(`${totalH.toFixed(2)}m`, hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
+    doc.text(formatFeetInches(totalH), hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
 
     // === Custom user measurements ===
     if (floor.measurements && floor.measurements.length > 0) {
@@ -227,10 +228,11 @@ export function exportPDF(options) {
     }
 
     // Labels
+    const scaleBarFt = Math.round(scaleBarMeters * 3.28084);
     doc.setFontSize(6);
     doc.setTextColor(0, 0, 0);
     doc.text('0', sbX, sbY - 1);
-    doc.text(`${scaleBarMeters}m`, sbX + scaleBarMm, sbY - 1, { align: 'right' });
+    doc.text(`${scaleBarFt} ft`, sbX + scaleBarMm, sbY - 1, { align: 'right' });
   }
 
   return { doc, fileName };

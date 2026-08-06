@@ -10,6 +10,7 @@ import { extractCrossSection } from './cross-section.js';
 import { detectRooms } from './room-detector.js';
 import { FloorPlanEditor } from './floor-plan-editor.js';
 import { exportPDF, savePDF } from './pdf-exporter.js';
+import { formatFeetInches } from './utils/geometry.js';
 
 // ============================================================
 // Application State
@@ -166,10 +167,10 @@ function initOrientStep() {
   $('#stat-triangles').textContent = state.modelData.totalTriangles.toLocaleString();
   $('#stat-meshes').textContent = state.modelData.meshCount.toString();
   const b = state.modelData.bounds;
-  const sizeX = (b.max.x - b.min.x).toFixed(1);
-  const sizeY = (b.max.y - b.min.y).toFixed(1);
-  const sizeZ = (b.max.z - b.min.z).toFixed(1);
-  $('#stat-bounds').textContent = `${sizeX} × ${sizeY} × ${sizeZ}m`;
+  const sizeX = formatFeetInches(b.max.x - b.min.x);
+  const sizeY = formatFeetInches(b.max.y - b.min.y);
+  const sizeZ = formatFeetInches(b.max.z - b.min.z);
+  $('#stat-bounds').textContent = `${sizeX} × ${sizeY} × ${sizeZ}`;
 
   // Show up arrow
   state.viewport.showUpArrow(state.upAxis);
@@ -315,12 +316,12 @@ function initEditStep() {
     slider.min = Math.round(minH * 100);
     slider.max = Math.round(maxH * 100);
     slider.value = Math.round(plan.sliceHeight * 100);
-    sliderValue.textContent = `${plan.sliceHeight.toFixed(1)}m`;
+    sliderValue.textContent = formatFeetInches(plan.sliceHeight);
   }
 
   slider.addEventListener('input', () => {
     const height = parseInt(slider.value) / 100;
-    sliderValue.textContent = `${height.toFixed(1)}m`;
+    sliderValue.textContent = formatFeetInches(height);
   });
 
   slider.addEventListener('change', () => {

@@ -3,6 +3,20 @@
  */
 
 /**
+ * Formats a distance in meters as Feet & Inches (e.g., 3.77m -> 12' 4")
+ * @param {number} meters Distance in meters
+ * @returns {string} Formatted string in feet and inches
+ */
+export function formatFeetInches(meters) {
+  if (meters == null || isNaN(meters)) return '0\' 0"';
+  const totalInches = Math.round(meters * 39.3701);
+  const feet = Math.floor(Math.abs(totalInches) / 12);
+  const inches = Math.abs(totalInches) % 12;
+  const sign = meters < 0 ? '-' : '';
+  return `${sign}${feet}' ${inches}"`;
+}
+
+/**
  * Calculates the intersection of two line segments, if any.
  * @param {number[]} p1 Start point of segment 1 [x, y]
  * @param {number[]} p2 End point of segment 1 [x, y]

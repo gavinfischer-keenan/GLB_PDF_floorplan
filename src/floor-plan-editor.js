@@ -4,7 +4,7 @@
  * Supports Select, Pan (Hand), Text, Measure, Draw, Erase tools, and Undo/Redo.
  */
 import * as d3 from 'd3';
-import { distancePointToPoint } from './utils/geometry.js';
+import { distancePointToPoint, formatFeetInches } from './utils/geometry.js';
 
 export class FloorPlanEditor {
   /**
@@ -171,7 +171,7 @@ export class FloorPlanEditor {
                 id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
                 p1: this._startPt,
                 p2: endPt,
-                text: `${dist.toFixed(2)}m`,
+                text: formatFeetInches(dist),
               });
             } else if (this.currentTool === 'draw') {
               this.wallSegments.push([this._startPt, endPt]);
@@ -219,7 +219,7 @@ export class FloorPlanEditor {
         .attr('y', midY - 0.2)
         .attr('font-size', fontSize)
         .attr('fill', '#38bdf8')
-        .text(`${dist.toFixed(2)}m`);
+        .text(formatFeetInches(dist));
     });
 
     // Right click cancels active drawing
@@ -456,13 +456,13 @@ export class FloorPlanEditor {
     // Bottom dimension (total width)
     this._drawDimension(
       [bounds.minX, bounds.maxY + offset], [bounds.maxX, bounds.maxY + offset],
-      `${width.toFixed(2)}m`, fontSize, null
+      formatFeetInches(width), fontSize, null
     );
 
     // Right dimension (total height)
     this._drawDimension(
       [bounds.maxX + offset, bounds.minY], [bounds.maxX + offset, bounds.maxY],
-      `${height.toFixed(2)}m`, fontSize, null
+      formatFeetInches(height), fontSize, null
     );
 
     // Draw custom user measurements
