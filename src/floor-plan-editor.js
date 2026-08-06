@@ -121,16 +121,19 @@ export class FloorPlanEditor {
           event.stopPropagation();
           const meas = this.measurements.find((m) => m.id === itemId);
           this.selectedItem = meas ? { type: 'measurement', data: meas } : null;
-          this.render();
+          this.dimensionLayer.selectAll('.dimension-group').classed('selected', false);
+          target.classed('selected', true);
         } else if (itemType === 'text' && itemId) {
           event.stopPropagation();
           const note = this.textNotes.find((n) => n.id === itemId);
           this.selectedItem = note ? { type: 'text', data: note } : null;
-          this.render();
+          this.labelLayer.selectAll('.text-note').classed('selected', false);
+          target.classed('selected', true).attr('fill', '#38bdf8');
         } else {
           // Clicked background — deselect
           this.selectedItem = null;
-          this.render();
+          this.dimensionLayer.selectAll('.dimension-group').classed('selected', false);
+          this.labelLayer.selectAll('.text-note').classed('selected', false).attr('fill', '#facc15');
         }
         return;
       }
@@ -579,6 +582,8 @@ export class FloorPlanEditor {
     const minDim = Math.min(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) || 5;
     const fontSize = Math.max(0.14, Math.min(0.4, minDim * 0.07));
 
+    const self = this;
+
     for (const note of this.textNotes) {
       const isSelected = this.selectedItem?.type === 'text' && this.selectedItem?.data?.id === note.id;
 
@@ -592,28 +597,43 @@ export class FloorPlanEditor {
         .attr('fill', isSelected ? '#38bdf8' : '#facc15')
         .text(note.text);
 
-      // Attach D3 Drag for moving text in Select mode
-      const self = this;
-      textElem.call(
-        d3.drag()
-          .filter((event) => self.currentTool === 'select' && !event.button)
-          .on('start', (event) => {
-            self.selectedItem = { type: 'text', data: note };
-            self.labelLayer.selectAll('.text-note').classed('selected', false);
-            textElem.classed('selected', true).attr('fill', '#38bdf8');
-          })
-          .on('drag', (event) => {
-            const [wx, wy] = d3.pointer(event, self.mainGroup.node());
-            note.pos = [wx, wy];
-            textElem
-              .attr('x', wx)
-              .attr('y', wy);
-          })
-          .on('end', () => {
+      // Native Pointer Drag for moving text notes in Select mode
+      textElem.on('pointerdown', (event) => {
+        if (self.currentTool !== 'select' || event.button !== 0) return;
+        event.stopPropagation();
+        event.preventDefault();
+
+        self.selectedItem = { type: 'text', data: note };
+        self.labelLayer.selectAll('.text-note').classed('selected', false).attr('fill', '#facc15');
+        textElem.classed('selected', true).attr('fill', '#38bdf8');
+
+        const startMouseX = event.clientX;
+        const startMouseY = event.clientY;
+        const startPosX = note.pos[0];
+        const startPosY = note.pos[1];
+        const scale = self._currentTransform ? self._currentTransform.k : 1;
+
+        let hasDragged = false;
+
+        const onPointerMove = (moveEv) => {
+          hasDragged = true;
+          const dx = (moveEv.clientX - startMouseX) / scale;
+          const dy = (moveEv.clientY - startMouseY) / scale;
+          note.pos = [startPosX + dx, startPosY + dy];
+          textElem.attr('x', note.pos[0]).attr('y', note.pos[1]);
+        };
+
+        const onPointerUp = () => {
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+          if (hasDragged) {
             self._pushUndo();
-            self.render();
-          })
-      );
+          }
+        };
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+      });
 
       // Double click to edit existing text note
       textElem.on('dblclick', (event) => {
