@@ -1,11 +1,11 @@
 /**
  * Main application — orchestrates the GLB → Floor Plan pipeline
- * Manages the 5-step wizard flow and wires all components together.
+ * Manages the 4-step wizard flow and wires all components together.
  */
 import { GLBLoader } from './glb-loader.js';
 import { Viewport3D } from './viewport-3d.js';
 import { detectUpDirection } from './up-detector.js';
-import { detectFloors } from './floor-detector.js';
+import { detectFloor } from './floor-detector.js';
 import { extractCrossSection } from './cross-section.js';
 import { detectRooms } from './room-detector.js';
 import { FloorPlanEditor } from './floor-plan-editor.js';
@@ -19,11 +19,9 @@ const state = {
   file: null,
   modelData: null,      // From GLBLoader
   upAxis: null,          // Detected up direction
-  detectedFloors: [],    // From floor detector
-  selectedFloors: [],    // User-selected floors to process
-  floorPlans: [],        // Processed floor plan data per floor
+  detectedFloor: null,   // Single detected floor
+  floorPlan: null,       // Processed floor plan data
   viewport: null,        // 3D viewport instance
-  floorsViewport: null,  // 3D viewport for floor selection
   editor: null,          // Floor plan editor instance
 };
 
@@ -37,7 +35,6 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const steps = {
   load: $('#step-load'),
   orient: $('#step-orient'),
-  floors: $('#step-floors'),
   edit: $('#step-edit'),
   export: $('#step-export'),
 };
@@ -49,8 +46,8 @@ function goToStep(stepNum) {
   state.currentStep = stepNum;
 
   // Update step visibility
-  Object.values(steps).forEach((s) => s.classList.remove('active'));
-  const stepNames = ['load', 'orient', 'floors', 'edit', 'export'];
+  Object.values(steps).forEach((s) => s?.classList.remove('active'));
+  const stepNames = ['load', 'orient', 'edit', 'export'];
   steps[stepNames[stepNum - 1]]?.classList.add('active');
 
   // Update step indicators
@@ -63,9 +60,8 @@ function goToStep(stepNum) {
 
   // Step-specific initialization
   if (stepNum === 2) initOrientStep();
-  if (stepNum === 3) initFloorsStep();
-  if (stepNum === 4) initEditStep();
-  if (stepNum === 5) initExportStep();
+  if (stepNum === 3) initEditStep();
+  if (stepNum === 4) initExportStep();
 }
 
 // ============================================================
@@ -193,8 +189,29 @@ function initOrientStep() {
     });
   });
 
-  // Confirm button
-  $('#btn-confirm-orient').onclick = () => goToStep(3);
+  // Confirm button — auto-detect floor and jump to editor
+  $('#btn-confirm-orient').onclick = () => {
+    // Detect the single floor level
+    state.detectedFloor = detectFloor(state.modelData.meshes, state.upAxis);
+
+    if (!state.detectedFloor) {
+      // Fallback: use the model bounds to create a slice at the bottom + 1m
+      const b = state.modelData.bounds;
+      const axisChar = state.upAxis.slice(-1).toLowerCase();
+      const sign = state.upAxis[0] === '-' ? -1 : 1;
+      const floorH = sign > 0 ? b.min[axisChar] : b.max[axisChar];
+      state.detectedFloor = {
+        name: 'Floor 1',
+        floorHeight: floorH,
+        ceilingHeight: floorH + sign * 3.0,
+        sliceHeight: floorH + sign * 1.0,
+      };
+    }
+
+    // Process the floor plan
+    processFloorPlan();
+    goToStep(3);
+  };
   $('#btn-back-to-load').onclick = () => {
     // Reset and go back
     const uploadZone = $('#upload-zone');
@@ -205,126 +222,48 @@ function initOrientStep() {
   };
 }
 
-// ============================================================
-// Step 3: Select Floor Levels
-// ============================================================
-function initFloorsStep() {
-  // Create a second viewport for floor visualization
-  const container = $('#viewport-floors');
-  if (!state.floorsViewport) {
-    state.floorsViewport = new Viewport3D(container);
-  }
-  state.floorsViewport.setModel(state.modelData.scene.clone(), state.modelData.bounds);
-  state.floorsViewport.showUpArrow(state.upAxis);
+/**
+ * Process cross-section for the detected floor
+ */
+function processFloorPlan() {
+  const floor = state.detectedFloor;
 
-  // Detect floors
-  state.detectedFloors = detectFloors(state.modelData.meshes, state.upAxis);
+  // Extract cross-section at slice height
+  const crossSection = extractCrossSection(
+    state.modelData.meshes,
+    floor.sliceHeight,
+    state.upAxis
+  );
 
-  // Show floor planes in 3D
-  state.floorsViewport.showFloorPlanes(state.detectedFloors, state.upAxis);
+  // Detect rooms from cross-section segments
+  const rooms = detectRooms(crossSection.segments, 0.05);
 
-  // Populate floor list
-  const floorList = $('#floor-list');
-  floorList.innerHTML = '';
+  // Check for "non-building" indicators
+  const bounds = crossSection.bounds;
+  const spanX = bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY;
 
-  if (state.detectedFloors.length === 0) {
-    floorList.innerHTML = `
-      <div style="padding: 1rem; color: var(--text-secondary); text-align: center;">
-        <p>No floor levels were automatically detected.</p>
-        <p style="font-size: 0.8rem; margin-top: 0.5rem;">This may indicate the model is not a building interior, or the orientation needs adjustment.</p>
-      </div>
-    `;
-  } else {
-    state.detectedFloors.forEach((floor, i) => {
-      const item = document.createElement('div');
-      item.className = 'floor-item selected';
-      item.innerHTML = `
-        <input type="checkbox" checked data-index="${i}" />
-        <div class="floor-item-info">
-          <div class="floor-item-name">${floor.name}</div>
-          <div class="floor-item-height">Height: ${floor.floorHeight.toFixed(2)}m · Slice: ${floor.sliceHeight.toFixed(2)}m</div>
-        </div>
-      `;
-      floorList.appendChild(item);
-
-      // Toggle selection
-      const checkbox = item.querySelector('input[type="checkbox"]');
-      checkbox.addEventListener('change', () => {
-        item.classList.toggle('selected', checkbox.checked);
-      });
-    });
+  let warning = null;
+  if (crossSection.segments.length === 0) {
+    warning = 'No wall segments detected. Try adjusting the orientation or the slice height in the editor.';
+  } else if (spanX > 200 || spanY > 200) {
+    warning = 'Model spans over 200m. This appears to be a large outdoor area rather than a building.';
   }
 
-  // Navigation
-  $('#btn-back-to-orient').onclick = () => goToStep(2);
-  $('#btn-confirm-floors').onclick = () => {
-    // Collect selected floors
-    const checkboxes = floorList.querySelectorAll('input[type="checkbox"]');
-    state.selectedFloors = [];
-    checkboxes.forEach((cb) => {
-      if (cb.checked) {
-        state.selectedFloors.push(state.detectedFloors[parseInt(cb.dataset.index)]);
-      }
-    });
-
-    if (state.selectedFloors.length === 0) {
-      showError('No Floors Selected', 'Please select at least one floor level to generate a plan for.');
-      return;
-    }
-
-    // Process floor plans
-    processFloorPlans();
-    goToStep(4);
+  state.floorPlan = {
+    name: floor.name,
+    floorHeight: floor.floorHeight,
+    sliceHeight: floor.sliceHeight,
+    segments: crossSection.segments,
+    rooms,
+    bounds: crossSection.bounds,
+    warning,
+    walls: crossSection.segments,
   };
 }
 
-/**
- * Process cross-sections and detect rooms for each selected floor
- */
-function processFloorPlans() {
-  state.floorPlans = [];
-
-  for (const floor of state.selectedFloors) {
-    // Extract cross-section at slice height
-    const crossSection = extractCrossSection(
-      state.modelData.meshes,
-      floor.sliceHeight,
-      state.upAxis
-    );
-
-    // Detect rooms from cross-section segments
-    const rooms = detectRooms(crossSection.segments, 0.05);
-
-    // Check for "non-building" indicators
-    const totalArea = rooms.reduce((sum, r) => sum + Math.abs(r.area), 0);
-    const bounds = crossSection.bounds;
-    const spanX = bounds.maxX - bounds.minX;
-    const spanY = bounds.maxY - bounds.minY;
-
-    let warning = null;
-    if (rooms.length === 0 && crossSection.segments.length > 0) {
-      warning = 'No enclosed rooms detected. The model may be an open area or the slice height may need adjustment.';
-    } else if (totalArea > 10000) {
-      warning = 'Very large area detected (>10,000 m²). This may not be a building interior.';
-    } else if (spanX > 200 || spanY > 200) {
-      warning = 'Model spans over 200m. This appears to be a large outdoor area rather than a building.';
-    }
-
-    state.floorPlans.push({
-      name: floor.name,
-      floorHeight: floor.floorHeight,
-      sliceHeight: floor.sliceHeight,
-      segments: crossSection.segments,
-      rooms,
-      bounds: crossSection.bounds,
-      warning,
-      walls: crossSection.segments,  // alias for PDF exporter
-    });
-  }
-}
-
 // ============================================================
-// Step 4: Edit Floor Plans
+// Step 3: Edit Floor Plan
 // ============================================================
 function initEditStep() {
   const svgElement = $('#floor-plan-svg');
@@ -340,30 +279,13 @@ function initEditStep() {
   }
 
   // Check for warnings
-  for (const plan of state.floorPlans) {
-    if (plan.warning) {
-      showError('Warning', plan.warning);
-      break; // Show only the first warning
-    }
+  if (state.floorPlan?.warning) {
+    showError('Warning', state.floorPlan.warning);
   }
 
   // Load floor data into editor
-  state.editor.setFloorData(state.floorPlans);
-
-  // Build floor tabs
-  const tabContainer = $('#floor-tabs');
-  tabContainer.innerHTML = '';
-  state.floorPlans.forEach((plan, i) => {
-    const tab = document.createElement('button');
-    tab.className = `floor-tab${i === 0 ? ' active' : ''}`;
-    tab.textContent = plan.name;
-    tab.addEventListener('click', () => {
-      tabContainer.querySelectorAll('.floor-tab').forEach((t) => t.classList.remove('active'));
-      tab.classList.add('active');
-      state.editor.switchFloor(i);
-    });
-    tabContainer.appendChild(tab);
-  });
+  const floorData = state.floorPlan ? [state.floorPlan] : [];
+  state.editor.setFloorData(floorData);
 
   // Toolbar tools
   $$('.btn-tool[data-tool]').forEach((btn) => {
@@ -386,14 +308,14 @@ function initEditStep() {
   // Slice height slider
   const slider = $('#slice-height-slider');
   const sliderValue = $('#slice-height-value');
-  const activeFloor = state.floorPlans[state.editor.activeFloorIndex];
-  if (activeFloor) {
-    const minH = activeFloor.floorHeight;
-    const maxH = activeFloor.sliceHeight + 2;
+  const plan = state.floorPlan;
+  if (plan) {
+    const minH = plan.floorHeight;
+    const maxH = plan.sliceHeight + 2;
     slider.min = Math.round(minH * 100);
     slider.max = Math.round(maxH * 100);
-    slider.value = Math.round(activeFloor.sliceHeight * 100);
-    sliderValue.textContent = `${activeFloor.sliceHeight.toFixed(1)}m`;
+    slider.value = Math.round(plan.sliceHeight * 100);
+    sliderValue.textContent = `${plan.sliceHeight.toFixed(1)}m`;
   }
 
   slider.addEventListener('input', () => {
@@ -403,11 +325,10 @@ function initEditStep() {
 
   slider.addEventListener('change', () => {
     const height = parseInt(slider.value) / 100;
-    const floorIdx = state.editor.activeFloorIndex;
-    const plan = state.floorPlans[floorIdx];
-    plan.sliceHeight = height;
+    if (!state.floorPlan) return;
+    state.floorPlan.sliceHeight = height;
 
-    // Re-process this floor
+    // Re-process floor plan
     const crossSection = extractCrossSection(
       state.modelData.meshes,
       height,
@@ -415,22 +336,22 @@ function initEditStep() {
     );
     const rooms = detectRooms(crossSection.segments, 0.05);
 
-    plan.segments = crossSection.segments;
-    plan.walls = crossSection.segments;
-    plan.rooms = rooms;
-    plan.bounds = crossSection.bounds;
+    state.floorPlan.segments = crossSection.segments;
+    state.floorPlan.walls = crossSection.segments;
+    state.floorPlan.rooms = rooms;
+    state.floorPlan.bounds = crossSection.bounds;
 
-    state.editor.setFloorData(state.floorPlans);
-    state.editor.switchFloor(floorIdx);
+    state.editor.setFloorData([state.floorPlan]);
   });
 
   // Navigation
-  $('#btn-back-to-floors').onclick = () => goToStep(3);
-  $('#btn-export').onclick = () => goToStep(5);
+  const btnBack = $('#btn-back-to-orient');
+  if (btnBack) btnBack.onclick = () => goToStep(2);
+  $('#btn-export').onclick = () => goToStep(4);
 
   // Keyboard shortcuts
   document.onkeydown = (e) => {
-    if (state.currentStep !== 4) return;
+    if (state.currentStep !== 3) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
     if (e.key === 'v') {
@@ -457,10 +378,8 @@ function selectTool(tool) {
   state.editor?.setTool(tool);
 }
 
-
-
 // ============================================================
-// Step 5: Export PDF
+// Step 4: Export PDF
 // ============================================================
 function initExportStep() {
   // Set default project name from file
@@ -470,7 +389,7 @@ function initExportStep() {
   }
 
   // Back button
-  $('#btn-back-to-edit').onclick = () => goToStep(4);
+  $('#btn-back-to-edit').onclick = () => goToStep(3);
 
   // Save PDF button
   $('#btn-save-pdf').onclick = async () => {
@@ -484,7 +403,7 @@ function initExportStep() {
         projectName,
         paperSize,
         scale,
-        floors: state.floorPlans,
+        floors: state.floorPlan ? [state.floorPlan] : [],
         fileName: `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_floorplan.pdf`,
       });
 

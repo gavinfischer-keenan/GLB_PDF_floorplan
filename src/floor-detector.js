@@ -1,15 +1,16 @@
 import { buildHistogram, findPeaks, smoothHistogram } from './utils/histogram.js';
 
 /**
- * Detects floor levels in the 3D model.
+ * Detects the single primary floor level in the 3D model.
+ * Returns the lowest significant horizontal surface as the floor.
  * 
  * @param {Array} meshes - Array of meshes.
  * @param {string} upAxis - The detected up axis ('+y', '-y', '+z', etc.).
- * @returns {Array} Array of floors sorted by height.
+ * @returns {{ name: string, floorHeight: number, ceilingHeight: number, sliceHeight: number } | null}
  */
-export function detectFloors(meshes, upAxis) {
+export function detectFloor(meshes, upAxis) {
   if (!meshes || meshes.length === 0 || !upAxis) {
-    return [];
+    return null;
   }
 
   const heights = [];
@@ -21,6 +22,12 @@ export function detectFloors(meshes, upAxis) {
     if (axisDim === 'y') return y * sign;
     return z * sign;
   };
+
+  // Also track the raw axis coordinate (not sign-adjusted) for accurate slicing
+  const axisIdx = axisDim === 'x' ? 0 : axisDim === 'y' ? 1 : 2;
+
+  // Track raw heights (actual model coordinates along the up axis)
+  const rawHeights = [];
 
   for (const mesh of meshes) {
     const { positions, indices } = mesh;
@@ -61,58 +68,63 @@ export function detectFloors(meshes, upAxis) {
       const upDot = getAxisValue(nx, ny, nz);
       
       if (upDot > 0.85) {
-        // Horizontal face facing up
+        // Horizontal face pointing up — this is a floor surface
         const cx = (v0x + v1x + v2x) / 3;
         const cy = (v0y + v1y + v2y) / 3;
         const cz = (v0z + v1z + v2z) / 3;
         
-        heights.push(getAxisValue(cx, cy, cz));
+        const signedH = getAxisValue(cx, cy, cz);
+        heights.push(signedH);
+
+        // Raw model coordinate along the up axis
+        const raw = [cx, cy, cz][axisIdx];
+        rawHeights.push(raw);
       }
     }
   }
 
-  if (heights.length === 0) return [];
+  if (heights.length === 0) return null;
 
-  // 0.05m bin size
+  // Find the lowest horizontal surface — that's the floor
   const hist = buildHistogram(heights, 0.05);
-  const smoothedHist = smoothHistogram(hist, 2); // window of 2 bins each side
-  const peaks = findPeaks(smoothedHist, Math.max(5, heights.length * 0.005), 0.5); // min 5 faces or 0.5% of total, 0.5m separation
+  const smoothedHist = smoothHistogram(hist, 2);
+  const peaks = findPeaks(smoothedHist, Math.max(3, heights.length * 0.003), 0.3);
   
-  if (!peaks || peaks.length === 0) return [];
-
-  peaks.sort((a, b) => a.value - b.value); // Sort peaks by height value
-
-  const floors = [];
-  let floorIndex = 1;
-
-  for (let i = 0; i < peaks.length; i++) {
-    const floorPeak = peaks[i];
-    
-    if (floorPeak.usedAsCeiling) continue;
-
-    // Attempt to find a ceiling
-    let ceilingPeak = null;
-    for (let j = i + 1; j < peaks.length; j++) {
-      const diff = peaks[j].value - floorPeak.value;
-      if (diff >= 2.0 && diff <= 4.0) {
-        ceilingPeak = peaks[j];
-        break; // Assume first valid peak above is ceiling
-      }
-    }
-
-    const ceilingHeight = ceilingPeak ? ceilingPeak.value : floorPeak.value + 3.0;
-    
-    if (ceilingPeak) {
-      ceilingPeak.usedAsCeiling = true;
-    }
-
-    floors.push({
-      name: `Floor ${floorIndex++}`,
-      floorHeight: floorPeak.value,
-      ceilingHeight: ceilingHeight,
-      sliceHeight: floorPeak.value + 1.0
-    });
+  if (!peaks || peaks.length === 0) {
+    // Fallback: just use the minimum height
+    const minHeight = Math.min(...heights);
+    const minRaw = Math.min(...rawHeights);
+    return {
+      name: 'Floor 1',
+      floorHeight: minRaw,
+      ceilingHeight: minRaw + sign * 3.0,
+      sliceHeight: minRaw + sign * 1.0,
+    };
   }
 
-  return floors;
+  // Sort peaks by value (lowest first for positive up, highest first for negative)
+  peaks.sort((a, b) => a.value - b.value);
+
+  // The lowest peak is the floor
+  const floorPeak = peaks[0];
+
+  // Convert signed height back to raw model coordinate
+  const floorRaw = floorPeak.value * sign;
+
+  // Try to find a ceiling (next peak 2-4m above the floor)
+  let ceilingRaw = floorRaw + sign * 3.0; // default 3m ceiling
+  for (let j = 1; j < peaks.length; j++) {
+    const diff = peaks[j].value - floorPeak.value;
+    if (diff >= 2.0 && diff <= 4.5) {
+      ceilingRaw = peaks[j].value * sign;
+      break;
+    }
+  }
+
+  return {
+    name: 'Floor 1',
+    floorHeight: floorRaw,
+    ceilingHeight: ceilingRaw,
+    sliceHeight: floorRaw + sign * 1.0, // 1m above floor in model coordinates
+  };
 }

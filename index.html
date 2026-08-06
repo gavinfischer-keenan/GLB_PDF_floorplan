@@ -33,16 +33,11 @@
         <div class="step-connector"></div>
         <div class="step-indicator" data-step="3">
           <span class="step-number">3</span>
-          <span class="step-label">Floors</span>
+          <span class="step-label">Edit</span>
         </div>
         <div class="step-connector"></div>
         <div class="step-indicator" data-step="4">
           <span class="step-number">4</span>
-          <span class="step-label">Edit</span>
-        </div>
-        <div class="step-connector"></div>
-        <div class="step-indicator" data-step="5">
-          <span class="step-number">5</span>
           <span class="step-label">Export</span>
         </div>
       </div>
@@ -120,25 +115,9 @@
         </div>
       </section>
 
-      <!-- Step 3: Select Floor Levels -->
-      <section class="wizard-step" id="step-floors">
-        <div class="step-content split">
-          <div class="viewport-container" id="viewport-floors"></div>
-          <div class="side-panel">
-            <h2>Floor Levels</h2>
-            <p class="panel-description">Detected horizontal levels are shown. Check the floors you want to include in the plan.</p>
-            <div class="floor-list" id="floor-list">
-              <!-- Populated dynamically -->
-            </div>
-            <div class="step-actions">
-              <button class="btn btn-secondary" id="btn-back-to-orient">Back</button>
-              <button class="btn btn-primary" id="btn-confirm-floors">Generate Floor Plans</button>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <!-- Step 4: Edit Floor Plans -->
+
+      <!-- Step 3: Edit Floor Plans -->
       <section class="wizard-step" id="step-edit">
         <div class="step-content full-editor">
           <div class="editor-toolbar" id="editor-toolbar">
@@ -172,18 +151,13 @@
               <span class="toolbar-value" id="slice-height-value">1.0m</span>
             </div>
             <div class="toolbar-spacer"></div>
-            <div class="toolbar-group">
-              <div class="floor-tabs" id="floor-tabs">
-                <!-- Populated dynamically -->
-              </div>
-            </div>
           </div>
           <div class="editor-canvas" id="editor-canvas">
             <svg id="floor-plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
           </div>
 
           <div class="editor-bottom-bar">
-            <button class="btn btn-secondary" id="btn-back-to-floors">Back</button>
+            <button class="btn btn-secondary" id="btn-back-to-orient">Back</button>
             <div class="editor-zoom">
               <button class="btn btn-tool" id="btn-zoom-in" title="Zoom In">+</button>
               <span id="zoom-level">100%</span>
@@ -195,7 +169,7 @@
         </div>
       </section>
 
-      <!-- Step 5: Export PDF -->
+      <!-- Step 4: Export PDF -->
       <section class="wizard-step" id="step-export">
         <div class="step-content centered">
           <div class="export-panel">
