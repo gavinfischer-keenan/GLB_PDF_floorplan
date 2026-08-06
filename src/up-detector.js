@@ -68,41 +68,26 @@ export function detectUpDirection(meshes, bounds) {
     }
   }
 
-  // Find axis with max count
-  let maxCount = -1;
-  let maxAxis = '+y';
+  // Default preference for glTF standard (+y)
+  // Wall faces often point in +z/-z/+x/-x, causing naive face counts to misidentify walls as floors.
+  // We apply a strong preference multiplier to '+y'.
+  const yCount = counts['+y'] || 0;
+  
+  let bestAxis = '+y';
+  let maxWeightedCount = yCount * 2.5; // Require 2.5x more faces for non-+y axes to override +y
+
   for (const axis of axes) {
-    if (counts[axis.name] > maxCount) {
-      maxCount = counts[axis.name];
-      maxAxis = axis.name;
+    if (axis.name === '+y') continue;
+    const count = counts[axis.name];
+    if (count > maxWeightedCount) {
+      maxWeightedCount = count;
+      bestAxis = axis.name;
     }
   }
 
-  if (!bounds || !bounds.min || !bounds.max) {
-      const totalVotes = Object.values(counts).reduce((a, b) => a + b, 0);
-      return { axis: maxAxis, confidence: totalVotes > 0 ? maxCount / totalVotes : 0, counts };
-  }
-
-  // Bounding box heuristic
-  const extents = {
-    x: bounds.max.x - bounds.min.x,
-    y: bounds.max.y - bounds.min.y,
-    z: bounds.max.z - bounds.min.z
-  };
-
-  const isSmallestExtent = (axis) => {
-    const dim = axis[1]; // 'x', 'y', or 'z'
-    const ext = extents[dim];
-    return ext <= extents.x && ext <= extents.y && ext <= extents.z;
-  };
-
   const totalVotes = Object.values(counts).reduce((a, b) => a + b, 0);
-  const confidenceNormals = totalVotes > 0 ? maxCount / totalVotes : 0;
-  
-  let confidence = confidenceNormals;
-  if (isSmallestExtent(maxAxis)) {
-    confidence = Math.min(1.0, confidence + 0.2); // Boost confidence if it's the smallest extent
-  }
+  const rawMax = Math.max(...Object.values(counts));
+  const confidence = totalVotes > 0 ? rawMax / totalVotes : 0.8;
 
-  return { axis: maxAxis, confidence, counts };
+  return { axis: bestAxis, confidence, counts };
 }
