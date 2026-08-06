@@ -265,14 +265,22 @@ export class FloorPlanEditor {
     const input = container.append('input')
       .attr('type', 'text')
       .attr('class', 'canvas-text-input')
-      .attr('placeholder', 'Type text note...')
+      .attr('placeholder', 'Type note & press Enter...')
       .style('left', `${relativeX}px`)
       .style('top', `${relativeY}px`);
 
     const node = input.node();
-    node.focus();
 
+    // Focus input after initial click completes
+    setTimeout(() => {
+      node.focus();
+      node.select();
+    }, 50);
+
+    let isCommitted = false;
     const commitText = () => {
+      if (isCommitted) return;
+      isCommitted = true;
       const val = node.value.trim();
       input.remove();
       if (val) {
@@ -287,16 +295,21 @@ export class FloorPlanEditor {
     };
 
     input.on('keydown', (e) => {
+      e.stopPropagation(); // Stop key events from triggering global tool shortcuts while typing
       if (e.key === 'Enter') {
         commitText();
       } else if (e.key === 'Escape') {
+        isCommitted = true;
         input.remove();
       }
     });
 
-    input.on('blur', () => {
-      commitText();
-    });
+    // Attach blur handler after a short delay so the initial click doesn't trigger blur
+    setTimeout(() => {
+      input.on('blur', () => {
+        commitText();
+      });
+    }, 300);
   }
 
   /**
