@@ -645,9 +645,9 @@ body {
 }
 
 #floor-plan-svg .text-note {
-  fill: #f8fafc;
+  fill: #facc15 !important;
   font-family: var(--font-sans);
-  font-weight: 500;
+  font-weight: 600;
   text-anchor: middle;
   dominant-baseline: central;
   cursor: pointer;
@@ -655,15 +655,15 @@ body {
 }
 
 #floor-plan-svg .text-note.selected {
-  fill: #38bdf8;
+  fill: #38bdf8 !important;
   font-weight: 700;
 }
 
 .canvas-text-input {
   position: absolute;
   background: #0f172a;
-  color: #f8fafc;
-  border: 1px solid #38bdf8;
+  color: #facc15;
+  border: 1px solid #facc15;
   border-radius: 4px;
   padding: 4px 8px;
   font-family: var(--font-sans);

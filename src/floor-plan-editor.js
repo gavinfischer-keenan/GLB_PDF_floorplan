@@ -551,6 +551,7 @@ export class FloorPlanEditor {
         .attr('x', note.pos[0])
         .attr('y', note.pos[1])
         .attr('font-size', fontSize)
+        .attr('fill', isSelected ? '#38bdf8' : '#facc15')
         .text(note.text);
     }
   }
