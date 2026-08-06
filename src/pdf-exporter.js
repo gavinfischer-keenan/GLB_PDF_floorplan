@@ -131,6 +131,24 @@ export function exportPDF(options) {
     const hMid = toPage(bounds.maxX + dimOffset, (bounds.minY + bounds.maxY) / 2);
     doc.text(`${totalH.toFixed(2)}m`, hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
 
+    // === Custom user measurements ===
+    if (floor.measurements && floor.measurements.length > 0) {
+      doc.setDrawColor(80, 80, 80);
+      doc.setLineWidth(0.15);
+      doc.setFontSize(6);
+      doc.setTextColor(60, 60, 60);
+
+      for (const m of floor.measurements) {
+        const mP1 = toPage(m.p1[0], m.p1[1]);
+        const mP2 = toPage(m.p2[0], m.p2[1]);
+        doc.line(mP1.x, mP1.y, mP2.x, mP2.y);
+        doc.line(mP1.x - tickH, mP1.y - tickH, mP1.x + tickH, mP1.y + tickH);
+        doc.line(mP2.x - tickH, mP2.y - tickH, mP2.x + tickH, mP2.y + tickH);
+        const mMid = toPage((m.p1[0] + m.p2[0]) / 2, (m.p1[1] + m.p2[1]) / 2);
+        doc.text(m.text, mMid.x, mMid.y - 1.5, { align: 'center' });
+      }
+    }
+
     // === Title Block ===
     const tbHeight = 20;
     const tbY = paper.height - tbHeight - 5;

@@ -399,11 +399,16 @@ function initExportStep() {
     const scale = scaleVal === 'auto' ? 'auto' : parseInt(scaleVal);
 
     try {
+      const exportFloor = state.editor ? state.editor.getExportData() : state.floorPlan;
+      if (exportFloor && state.floorPlan) {
+        exportFloor.name = state.floorPlan.name;
+      }
+
       const { doc, fileName } = exportPDF({
         projectName,
         paperSize,
         scale,
-        floors: state.floorPlan ? [state.floorPlan] : [],
+        floors: exportFloor ? [exportFloor] : [],
         fileName: `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_floorplan.pdf`,
       });
 

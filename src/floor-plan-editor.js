@@ -1,10 +1,10 @@
 /**
  * FloorPlanEditor — SVG-based 2D floor plan editor
- * Renders walls, rooms, labels, and dimensions as interactive SVG elements.
- * Supports pan, zoom, room selection, labeling, and wall editing.
+ * Renders walls, dimensions, and custom measurements as interactive SVG elements.
+ * Supports pan, zoom, wall drawing, and interactive distance measuring.
  */
 import * as d3 from 'd3';
-import { polygonArea, polygonCentroid, distancePointToPoint } from './utils/geometry.js';
+import { distancePointToPoint } from './utils/geometry.js';
 
 export class FloorPlanEditor {
   /**
@@ -18,31 +18,24 @@ export class FloorPlanEditor {
     this.floors = [];
     /** @type {number} */
     this.activeFloorIndex = 0;
-    /** @type {Array<Object>} */
-    this.rooms = [];
     /** @type {Array<Array>} */
     this.wallSegments = [];
+    /** @type {Array<Object>} */
+    this.measurements = [];
     /** @type {string} */
     this.currentTool = 'select';
-    /** @type {Object|null} */
-    this.selectedRoom = null;
 
     // Undo/redo
     this.undoStack = [];
     this.redoStack = [];
 
     // Callbacks
-    this.onRoomSelected = null;
-    this.onRoomUpdated = null;
     this.onZoomChanged = null;
 
-    // Set up SVG layers
+    // Set up SVG layers & interaction
     this._setupLayers();
     this._setupZoom();
-
-    // Drawing state
-    this._drawingPoints = [];
-    this._isDrawing = false;
+    this._setupInteraction();
   }
 
   /**
@@ -52,12 +45,10 @@ export class FloorPlanEditor {
     // Main transform group (for zoom/pan)
     this.mainGroup = this.svg.append('g').attr('class', 'main-group');
 
-    // Layer order: grid → rooms → walls → dimensions → labels → interaction
+    // Layer order: grid → walls → dimensions → interaction
     this.gridLayer = this.mainGroup.append('g').attr('class', 'grid-layer');
-    this.roomLayer = this.mainGroup.append('g').attr('class', 'room-layer');
     this.wallLayer = this.mainGroup.append('g').attr('class', 'wall-layer');
     this.dimensionLayer = this.mainGroup.append('g').attr('class', 'dimension-layer');
-    this.labelLayer = this.mainGroup.append('g').attr('class', 'label-layer');
     this.interactionLayer = this.mainGroup.append('g').attr('class', 'interaction-layer');
   }
 
@@ -66,7 +57,14 @@ export class FloorPlanEditor {
    */
   _setupZoom() {
     this.zoom = d3.zoom()
-      .scaleExtent([0.1, 50])
+      .scaleExtent([0.01, 1000])
+      .filter((event) => {
+        // Allow wheel zoom in all modes; restrict click-drag zoom/pan to 'select' mode
+        if (this.currentTool === 'measure' || this.currentTool === 'draw') {
+          return event.type === 'wheel';
+        }
+        return !event.button;
+      })
       .on('zoom', (event) => {
         this.mainGroup.attr('transform', event.transform);
         this._currentTransform = event.transform;
@@ -80,8 +78,106 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Load floor plan data for multiple floors
-   * @param {Array<{segments: Array, rooms: Array, bounds: Object}>} floors
+   * Set up interactive click-to-measure and click-to-draw
+   */
+  _setupInteraction() {
+    this._startPt = null;
+    this._isMeasuring = false;
+
+    this.svg.on('pointerdown', (event) => {
+      if (this.currentTool !== 'measure' && this.currentTool !== 'draw') return;
+      if (event.button !== 0) return; // left click only
+
+      const [wx, wy] = d3.pointer(event, this.mainGroup.node());
+
+      if (!this._isMeasuring) {
+        // First click: start measurement / wall
+        this._isMeasuring = true;
+        this._startPt = [wx, wy];
+      } else {
+        // Second click: complete measurement / wall
+        const endPt = [wx, wy];
+        const dist = distancePointToPoint(this._startPt, endPt);
+
+        if (dist >= 0.05) {
+          this._pushUndo();
+          if (this.currentTool === 'measure') {
+            this.measurements.push({
+              p1: this._startPt,
+              p2: endPt,
+              text: `${dist.toFixed(2)}m`,
+            });
+          } else if (this.currentTool === 'draw') {
+            this.wallSegments.push([this._startPt, endPt]);
+          }
+          this.render();
+        }
+
+        this._isMeasuring = false;
+        this._startPt = null;
+        this.interactionLayer.selectAll('*').remove();
+      }
+    });
+
+    this.svg.on('pointermove', (event) => {
+      if (!this._isMeasuring || !this._startPt) return;
+
+      const [wx, wy] = d3.pointer(event, this.mainGroup.node());
+      const dist = distancePointToPoint(this._startPt, [wx, wy]);
+
+      this.interactionLayer.selectAll('*').remove();
+
+      // Rubberband line
+      this.interactionLayer.append('line')
+        .attr('class', this.currentTool === 'measure' ? 'dimension-line' : 'wall-line')
+        .attr('x1', this._startPt[0]).attr('y1', this._startPt[1])
+        .attr('x2', wx).attr('y2', wy)
+        .attr('stroke', '#38bdf8')
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4 4')
+        .attr('vector-effect', 'non-scaling-stroke');
+
+      // Live dimension text
+      const midX = (this._startPt[0] + wx) / 2;
+      const midY = (this._startPt[1] + wy) / 2;
+      const bounds = this._getBounds() || { minX: 0, maxX: 10, minY: 0, maxY: 10 };
+      const minDim = Math.min(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) || 5;
+      const fontSize = Math.max(0.12, Math.min(0.35, minDim * 0.06));
+
+      this.interactionLayer.append('text')
+        .attr('class', 'dimension-text')
+        .attr('x', midX)
+        .attr('y', midY - 0.2)
+        .attr('font-size', fontSize)
+        .attr('fill', '#38bdf8')
+        .text(`${dist.toFixed(2)}m`);
+    });
+
+    // Right click cancels active drawing
+    this.svg.on('contextmenu', (event) => {
+      if (this._isMeasuring) {
+        event.preventDefault();
+        this._cancelInteraction();
+      }
+    });
+
+    // Escape key cancels active drawing
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this._isMeasuring) {
+        this._cancelInteraction();
+      }
+    });
+  }
+
+  _cancelInteraction() {
+    this._isMeasuring = false;
+    this._startPt = null;
+    this.interactionLayer.selectAll('*').remove();
+  }
+
+  /**
+   * Load floor plan data
+   * @param {Array<{segments: Array, bounds: Object}>} floors
    */
   setFloorData(floors) {
     this.floors = floors;
@@ -91,7 +187,7 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Switch to a different floor
+   * Switch to a floor
    * @param {number} index
    */
   switchFloor(index) {
@@ -99,8 +195,7 @@ export class FloorPlanEditor {
     this.activeFloorIndex = index;
     const floor = this.floors[index];
     this.wallSegments = floor.segments || [];
-    this.rooms = floor.rooms || [];
-    this.selectedRoom = null;
+    this.measurements = floor.measurements || [];
     this.render();
     this.fitToView();
   }
@@ -150,36 +245,6 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Render room polygons
-   */
-  _renderRooms() {
-    this.roomLayer.selectAll('*').remove();
-
-    const roomElements = this.roomLayer.selectAll('.room-group')
-      .data(this.rooms)
-      .enter()
-      .append('g')
-      .attr('class', 'room-group');
-
-    roomElements.append('polygon')
-      .attr('class', (d) => `room-fill${d === this.selectedRoom ? ' selected' : ''}`)
-      .attr('points', (d) => d.polygon.map((p) => `${p[0]},${p[1]}`).join(' '))
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        if (this.currentTool === 'select' || this.currentTool === 'label') {
-          this._selectRoom(d);
-        }
-      });
-
-    // Click on background to deselect
-    this.svg.on('click', () => {
-      if (this.currentTool === 'select') {
-        this._selectRoom(null);
-      }
-    });
-  }
-
-  /**
    * Render wall segments
    */
   _renderWalls() {
@@ -193,12 +258,11 @@ export class FloorPlanEditor {
       .attr('x1', (d) => d[0][0])
       .attr('y1', (d) => d[0][1])
       .attr('x2', (d) => d[1][0])
-      .attr('y2', (d) => d[1][1])
-      .attr('stroke-width', 0.08);
+      .attr('y2', (d) => d[1][1]);
   }
 
   /**
-   * Render overall floor plan dimension lines
+   * Render overall floor plan dimension lines and user measurements
    */
   _renderDimensions() {
     this.dimensionLayer.selectAll('*').remove();
@@ -226,6 +290,11 @@ export class FloorPlanEditor {
       [bounds.maxX + offset, bounds.minY], [bounds.maxX + offset, bounds.maxY],
       `${height.toFixed(2)}m`, fontSize
     );
+
+    // Draw custom user measurements
+    for (const m of this.measurements) {
+      this._drawDimension(m.p1, m.p2, m.text, fontSize);
+    }
   }
 
   /**
@@ -274,99 +343,16 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Render room labels
-   */
-  _renderLabels() {
-    this.labelLayer.selectAll('*').remove();
-
-    for (const room of this.rooms) {
-      if (!room.centroid) continue;
-
-      // Room name
-      this.labelLayer.append('text')
-        .attr('class', 'room-label')
-        .attr('x', room.centroid[0])
-        .attr('y', room.centroid[1] - 0.15)
-        .attr('font-size', 0.2)
-        .text(room.name || 'Room');
-
-      // Room area
-      this.labelLayer.append('text')
-        .attr('class', 'room-area-label')
-        .attr('x', room.centroid[0])
-        .attr('y', room.centroid[1] + 0.2)
-        .attr('font-size', 0.15)
-        .text(`${Math.abs(room.area).toFixed(1)} m²`);
-    }
-  }
-
-  /**
-   * Select a room
-   * @param {Object|null} room
-   */
-  _selectRoom(room) {
-    this.selectedRoom = room;
-    this.render();
-    if (this.onRoomSelected) {
-      this.onRoomSelected(room);
-    }
-  }
-
-  /**
-   * Update a room's properties
-   * @param {Object} room
-   * @param {Object} updates - { name?, type? }
-   */
-  updateRoom(room, updates) {
-    // Save undo state
-    this._pushUndo();
-
-    Object.assign(room, updates);
-    this.render();
-    if (this.onRoomUpdated) {
-      this.onRoomUpdated(room);
-    }
-  }
-
-  /**
-   * Delete a room
-   * @param {Object} room
-   */
-  deleteRoom(room) {
-    this._pushUndo();
-    const idx = this.rooms.indexOf(room);
-    if (idx >= 0) {
-      this.rooms.splice(idx, 1);
-      if (this.selectedRoom === room) {
-        this.selectedRoom = null;
-      }
-      this.render();
-    }
-  }
-
-  /**
-   * Add a wall segment
-   * @param {Array} segment [[x1,y1],[x2,y2]]
-   */
-  addWallSegment(segment) {
-    this._pushUndo();
-    this.wallSegments.push(segment);
-    this.render();
-  }
-
-  /**
    * Set the current tool
-   * @param {string} tool - 'select' | 'label' | 'draw' | 'erase' | 'measure'
+   * @param {string} tool - 'select' | 'draw' | 'erase' | 'measure'
    */
   setTool(tool) {
     this.currentTool = tool;
-    this._isDrawing = false;
-    this._drawingPoints = [];
+    this._cancelInteraction();
 
     // Adjust cursor
     const cursors = {
       select: 'default',
-      label: 'pointer',
       draw: 'crosshair',
       erase: 'pointer',
       measure: 'crosshair',
@@ -425,11 +411,10 @@ export class FloorPlanEditor {
    */
   _pushUndo() {
     this.undoStack.push({
-      rooms: JSON.parse(JSON.stringify(this.rooms)),
+      measurements: JSON.parse(JSON.stringify(this.measurements)),
       wallSegments: JSON.parse(JSON.stringify(this.wallSegments)),
     });
     this.redoStack = [];
-    // Limit undo stack size
     if (this.undoStack.length > 50) {
       this.undoStack.shift();
     }
@@ -441,13 +426,12 @@ export class FloorPlanEditor {
   undo() {
     if (this.undoStack.length === 0) return false;
     this.redoStack.push({
-      rooms: JSON.parse(JSON.stringify(this.rooms)),
+      measurements: JSON.parse(JSON.stringify(this.measurements)),
       wallSegments: JSON.parse(JSON.stringify(this.wallSegments)),
     });
     const state = this.undoStack.pop();
-    this.rooms = state.rooms;
+    this.measurements = state.measurements || [];
     this.wallSegments = state.wallSegments;
-    this.selectedRoom = null;
     this.render();
     return true;
   }
@@ -458,13 +442,12 @@ export class FloorPlanEditor {
   redo() {
     if (this.redoStack.length === 0) return false;
     this.undoStack.push({
-      rooms: JSON.parse(JSON.stringify(this.rooms)),
+      measurements: JSON.parse(JSON.stringify(this.measurements)),
       wallSegments: JSON.parse(JSON.stringify(this.wallSegments)),
     });
     const state = this.redoStack.pop();
-    this.rooms = state.rooms;
+    this.measurements = state.measurements || [];
     this.wallSegments = state.wallSegments;
-    this.selectedRoom = null;
     this.render();
     return true;
   }
@@ -487,34 +470,31 @@ export class FloorPlanEditor {
       }
     }
 
-    for (const room of this.rooms) {
-      for (const p of room.polygon) {
-        minX = Math.min(minX, p[0]);
-        minY = Math.min(minY, p[1]);
-        maxX = Math.max(maxX, p[0]);
-        maxY = Math.max(maxY, p[1]);
-        hasData = true;
-      }
+    for (const m of this.measurements) {
+      minX = Math.min(minX, m.p1[0], m.p2[0]);
+      minY = Math.min(minY, m.p1[1], m.p2[1]);
+      maxX = Math.max(maxX, m.p1[0], m.p2[0]);
+      maxY = Math.max(maxY, m.p1[1], m.p2[1]);
+      hasData = true;
     }
 
     return hasData ? { minX, minY, maxX, maxY } : null;
   }
 
   /**
-   * Get the SVG element for PDF export
-   * @returns {SVGSVGElement}
+   * Get SVG element
    */
   getSVGElement() {
     return this.svgElement;
   }
 
   /**
-   * Get the current floor plan data for export
+   * Get export data
    */
   getExportData() {
     return {
       walls: this.wallSegments,
-      rooms: this.rooms,
+      measurements: this.measurements,
       bounds: this._getBounds(),
     };
   }
