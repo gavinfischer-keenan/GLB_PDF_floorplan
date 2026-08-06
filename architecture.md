@@ -87,3 +87,13 @@ Extracts room boundaries from line segments:
    - $5 - 12\text{ m}^2$: Small Room
    - $12 - 25\text{ m}^2$: Room
    - $> 25\text{ m}^2$: Living Area
+
+---
+
+## Testing Architecture
+
+Automated unit and integration testing are set up using **Vitest**. Tests reside in the `tests/` directory and target utility functions and parser detectors in a headless Node environment.
+
+- **`tests/geometry.test.js`**: Unit tests verifying Shoelace area, polygon centroids, point-in-polygon ray-casting, Douglas-Peucker simplification, distance metrics, and endpoint-merging loop detection. Also verifies imperial formatting conversion (`formatFeetInches`).
+- **`tests/histogram.test.js`**: Unit tests verifying bin accumulation, peak detection with threshold filters, and moving-average histogram smoothing.
+- **`tests/detectors.test.js`**: Functional mock-integration tests verifying `detectUpDirection` axis votes, `detectFloor` peak extraction/pairing, and `detectRooms` cycle filter labels.
