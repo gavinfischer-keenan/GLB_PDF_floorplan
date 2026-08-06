@@ -609,60 +609,25 @@ body {
 
 /* SVG Floor Plan Styles */
 #floor-plan-svg .wall-line {
-  stroke: var(--text-primary);
-  stroke-width: 3;
+  stroke: #38bdf8;
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
   stroke-linecap: round;
   fill: none;
 }
 
-#floor-plan-svg .room-fill {
-  fill: rgba(59, 130, 246, 0.08);
-  stroke: var(--accent-blue);
-  stroke-width: 1;
-  stroke-dasharray: 4 2;
-  cursor: pointer;
-  transition: fill 0.2s;
-}
-
-#floor-plan-svg .room-fill:hover {
-  fill: rgba(59, 130, 246, 0.18);
-}
-
-#floor-plan-svg .room-fill.selected {
-  fill: rgba(59, 130, 246, 0.25);
-  stroke-width: 2;
-  stroke-dasharray: none;
-}
-
-#floor-plan-svg .room-label {
-  fill: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  text-anchor: middle;
-  dominant-baseline: central;
-  pointer-events: none;
-}
-
-#floor-plan-svg .room-area-label {
-  fill: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-anchor: middle;
-  dominant-baseline: central;
-  pointer-events: none;
-}
-
 #floor-plan-svg .dimension-line {
-  stroke: var(--text-tertiary);
-  stroke-width: 0.75;
+  stroke: #94a3b8;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
 }
 
 #floor-plan-svg .dimension-text {
-  fill: var(--text-tertiary);
+  fill: #f8fafc;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-weight: 500;
   text-anchor: middle;
+  dominant-baseline: central;
 }
 
 

@@ -208,25 +208,30 @@ export class FloorPlanEditor {
 
     const width = bounds.maxX - bounds.minX;
     const height = bounds.maxY - bounds.minY;
-    const offset = 0.5; // Offset dimension lines from the plan edges
+    if (width <= 0 || height <= 0) return;
+
+    // Dynamic offset and font size proportional to room dimensions
+    const minDim = Math.min(width, height);
+    const offset = Math.max(0.3, Math.min(1.2, minDim * 0.12));
+    const fontSize = Math.max(0.12, Math.min(0.35, minDim * 0.06));
 
     // Bottom dimension (total width)
     this._drawDimension(
       [bounds.minX, bounds.maxY + offset], [bounds.maxX, bounds.maxY + offset],
-      `${width.toFixed(2)}m`
+      `${width.toFixed(2)}m`, fontSize
     );
 
     // Right dimension (total height)
     this._drawDimension(
       [bounds.maxX + offset, bounds.minY], [bounds.maxX + offset, bounds.maxY],
-      `${height.toFixed(2)}m`
+      `${height.toFixed(2)}m`, fontSize
     );
   }
 
   /**
    * Draw a single dimension line with tick marks and text
    */
-  _drawDimension(p1, p2, text) {
+  _drawDimension(p1, p2, text, fontSize = 0.18) {
     const group = this.dimensionLayer.append('g').attr('class', 'dimension-group');
 
     // Main line
@@ -236,7 +241,7 @@ export class FloorPlanEditor {
       .attr('x2', p2[0]).attr('y2', p2[1]);
 
     // Tick marks
-    const tickSize = 0.1;
+    const tickSize = fontSize * 0.6;
     const dx = p2[0] - p1[0];
     const dy = p2[1] - p1[1];
     const len = Math.sqrt(dx * dx + dy * dy);
@@ -262,9 +267,9 @@ export class FloorPlanEditor {
     const midY = (p1[1] + p2[1]) / 2;
     group.append('text')
       .attr('class', 'dimension-text')
-      .attr('x', midX + nx * 2)
-      .attr('y', midY + ny * 2)
-      .attr('font-size', 0.15)
+      .attr('x', midX + nx * 2.2)
+      .attr('y', midY + ny * 2.2)
+      .attr('font-size', fontSize)
       .text(text);
   }
 
@@ -373,30 +378,32 @@ export class FloorPlanEditor {
    * Fit the view to show all content
    */
   fitToView() {
-    const bounds = this._getBounds();
-    if (!bounds) return;
+    requestAnimationFrame(() => {
+      const bounds = this._getBounds();
+      if (!bounds) return;
 
-    const rect = this.svgElement.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
+      const rect = this.svgElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
 
-    const dataWidth = bounds.maxX - bounds.minX;
-    const dataHeight = bounds.maxY - bounds.minY;
-    if (dataWidth === 0 || dataHeight === 0) return;
+      const dataWidth = bounds.maxX - bounds.minX;
+      const dataHeight = bounds.maxY - bounds.minY;
+      if (dataWidth <= 0 || dataHeight <= 0) return;
 
-    const padding = 1; // 1 meter padding
-    const scaleX = rect.width / (dataWidth + padding * 2);
-    const scaleY = rect.height / (dataHeight + padding * 2);
-    const scale = Math.min(scaleX, scaleY) * 0.9;
+      const padding = Math.max(0.5, Math.min(2.0, Math.max(dataWidth, dataHeight) * 0.15));
+      const scaleX = rect.width / (dataWidth + padding * 2);
+      const scaleY = rect.height / (dataHeight + padding * 2);
+      const scale = Math.min(scaleX, scaleY);
 
-    const centerX = (bounds.minX + bounds.maxX) / 2;
-    const centerY = (bounds.minY + bounds.maxY) / 2;
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
 
-    const transform = d3.zoomIdentity
-      .translate(rect.width / 2, rect.height / 2)
-      .scale(scale)
-      .translate(-centerX, -centerY);
+      const transform = d3.zoomIdentity
+        .translate(rect.width / 2, rect.height / 2)
+        .scale(scale)
+        .translate(-centerX, -centerY);
 
-    this.svg.transition().duration(500).call(this.zoom.transform, transform);
+      this.svg.transition().duration(400).call(this.zoom.transform, transform);
+    });
   }
 
   /**
