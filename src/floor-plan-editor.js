@@ -151,7 +151,7 @@ export class FloorPlanEditor {
         return;
       }
 
-      // Measure or Draw Tools
+      // Measure or Draw Tools (snapped to 0°, 45°, or 90° axes)
       if (this.currentTool === 'measure' || this.currentTool === 'draw') {
         const [wx, wy] = d3.pointer(event, this.mainGroup.node());
 
@@ -160,8 +160,8 @@ export class FloorPlanEditor {
           this._isMeasuring = true;
           this._startPt = [wx, wy];
         } else {
-          // End point
-          const endPt = [wx, wy];
+          // End point snapped to nearest horizontal, vertical, or 45° axis
+          const endPt = this._snapPoint(this._startPt, [wx, wy]);
           const dist = distancePointToPoint(this._startPt, endPt);
 
           if (dist >= 0.05) {
@@ -186,28 +186,29 @@ export class FloorPlanEditor {
       }
     });
 
-    // Pointer move handler (for rubberband preview)
+    // Pointer move handler (for rubberband preview with axis snapping)
     this.svg.on('pointermove', (event) => {
       if (!this._isMeasuring || !this._startPt) return;
 
-      const [wx, wy] = d3.pointer(event, this.mainGroup.node());
-      const dist = distancePointToPoint(this._startPt, [wx, wy]);
+      const rawPt = d3.pointer(event, this.mainGroup.node());
+      const endPt = this._snapPoint(this._startPt, rawPt);
+      const dist = distancePointToPoint(this._startPt, endPt);
 
       this.interactionLayer.selectAll('*').remove();
 
-      // Rubberband line
+      // Rubberband line (snapped)
       this.interactionLayer.append('line')
         .attr('class', this.currentTool === 'measure' ? 'dimension-line' : 'wall-line')
         .attr('x1', this._startPt[0]).attr('y1', this._startPt[1])
-        .attr('x2', wx).attr('y2', wy)
+        .attr('x2', endPt[0]).attr('y2', endPt[1])
         .attr('stroke', '#38bdf8')
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '4 4')
         .attr('vector-effect', 'non-scaling-stroke');
 
       // Live dimension text
-      const midX = (this._startPt[0] + wx) / 2;
-      const midY = (this._startPt[1] + wy) / 2;
+      const midX = (this._startPt[0] + endPt[0]) / 2;
+      const midY = (this._startPt[1] + endPt[1]) / 2;
       const bounds = this._getBounds() || { minX: 0, maxX: 10, minY: 0, maxY: 10 };
       const minDim = Math.min(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) || 5;
       const fontSize = Math.max(0.12, Math.min(0.35, minDim * 0.06));
@@ -315,6 +316,28 @@ export class FloorPlanEditor {
 
     this.selectedItem = null;
     this.render();
+  }
+
+  /**
+   * Snap point p2 relative to p1 to the nearest 45-degree angle (0°, 45°, 90°, 135°, 180°, etc.)
+   * @param {[number, number]} p1 - Start point
+   * @param {[number, number]} p2 - Raw target point
+   * @returns {[number, number]} Snapped target point
+   */
+  _snapPoint(p1, p2) {
+    const dx = p2[0] - p1[0];
+    const dy = p2[1] - p1[1];
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) return p2;
+
+    const angle = Math.atan2(dy, dx);
+    const snapInterval = Math.PI / 4; // 45 degrees
+    const snappedAngle = Math.round(angle / snapInterval) * snapInterval;
+
+    return [
+      p1[0] + dist * Math.cos(snappedAngle),
+      p1[1] + dist * Math.sin(snappedAngle),
+    ];
   }
 
   _cancelInteraction() {
