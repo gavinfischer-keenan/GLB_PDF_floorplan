@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FloorPlan Extractor — GLB to Architectural Blueprint</title>
+  <meta name="description" content="Extract professional architectural floor plans from 3D scan GLB files. Detect floors, rooms, and generate blueprint PDFs." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/index.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 21v-4h6v4M9 10h1M14 10h1M9 14h1M14 14h1"/>
+        </svg>
+        <h1>FloorPlan Extractor</h1>
+      </div>
+      <div class="header-steps">
+        <div class="step-indicator" data-step="1">
+          <span class="step-number">1</span>
+          <span class="step-label">Load</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-indicator" data-step="2">
+          <span class="step-number">2</span>
+          <span class="step-label">Orient</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-indicator" data-step="3">
+          <span class="step-number">3</span>
+          <span class="step-label">Floors</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-indicator" data-step="4">
+          <span class="step-number">4</span>
+          <span class="step-label">Edit</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step-indicator" data-step="5">
+          <span class="step-number">5</span>
+          <span class="step-label">Export</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+
+      <!-- Step 1: Load GLB -->
+      <section class="wizard-step active" id="step-load">
+        <div class="step-content centered">
+          <div class="upload-zone" id="upload-zone">
+            <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M24 32V12M16 20l8-8 8 8M8 36h32"/>
+              <rect x="4" y="4" width="40" height="40" rx="4"/>
+            </svg>
+            <h2>Load 3D Scan</h2>
+            <p class="upload-hint">Drag & drop a <strong>.glb</strong> file here, or click to browse</p>
+            <input type="file" id="file-input" accept=".glb" hidden />
+            <button class="btn btn-primary" id="btn-browse">
+              <span>Choose GLB File</span>
+            </button>
+          </div>
+          <div class="loading-overlay" id="loading-overlay" hidden>
+            <div class="loading-spinner"></div>
+            <p class="loading-text">Parsing 3D model...</p>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: Confirm Up Direction -->
+      <section class="wizard-step" id="step-orient">
+        <div class="step-content split">
+          <div class="viewport-container" id="viewport-3d"></div>
+          <div class="side-panel">
+            <h2>Confirm Orientation</h2>
+            <p class="panel-description">The arrow shows the detected <strong>"up"</strong> direction. Rotate the 3D view to verify it looks correct.</p>
+            <div class="orientation-controls">
+              <h3>Up Direction</h3>
+              <div class="axis-selector">
+                <button class="btn btn-axis" data-axis="+y">Y+ <span class="axis-hint">Default</span></button>
+                <button class="btn btn-axis" data-axis="-y">Y−</button>
+                <button class="btn btn-axis" data-axis="+z">Z+</button>
+                <button class="btn btn-axis" data-axis="-z">Z−</button>
+                <button class="btn btn-axis" data-axis="+x">X+</button>
+                <button class="btn btn-axis" data-axis="-x">X−</button>
+              </div>
+              <div class="detection-info" id="detection-info">
+                <div class="info-badge">
+                  <span class="badge-label">Detected</span>
+                  <span class="badge-value" id="detected-axis">—</span>
+                </div>
+                <div class="info-badge">
+                  <span class="badge-label">Confidence</span>
+                  <span class="badge-value" id="detected-confidence">—</span>
+                </div>
+              </div>
+            </div>
+            <div class="model-stats" id="model-stats">
+              <h3>Model Info</h3>
+              <div class="stats-grid">
+                <div class="stat"><span class="stat-label">Triangles</span><span class="stat-value" id="stat-triangles">—</span></div>
+                <div class="stat"><span class="stat-label">Meshes</span><span class="stat-value" id="stat-meshes">—</span></div>
+                <div class="stat"><span class="stat-label">Bounds</span><span class="stat-value" id="stat-bounds">—</span></div>
+              </div>
+            </div>
+            <div class="step-actions">
+              <button class="btn btn-secondary" id="btn-back-to-load">Back</button>
+              <button class="btn btn-primary" id="btn-confirm-orient">Confirm & Detect Floors</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3: Select Floor Levels -->
+      <section class="wizard-step" id="step-floors">
+        <div class="step-content split">
+          <div class="viewport-container" id="viewport-floors"></div>
+          <div class="side-panel">
+            <h2>Floor Levels</h2>
+            <p class="panel-description">Detected horizontal levels are shown. Check the floors you want to include in the plan.</p>
+            <div class="floor-list" id="floor-list">
+              <!-- Populated dynamically -->
+            </div>
+            <div class="step-actions">
+              <button class="btn btn-secondary" id="btn-back-to-orient">Back</button>
+              <button class="btn btn-primary" id="btn-confirm-floors">Generate Floor Plans</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 4: Edit Floor Plans -->
+      <section class="wizard-step" id="step-edit">
+        <div class="step-content full-editor">
+          <div class="editor-toolbar" id="editor-toolbar">
+            <div class="toolbar-group">
+              <button class="btn btn-tool active" data-tool="select" title="Select (V)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2l12 8.5L10 12l-2 6z"/></svg>
+              </button>
+              <button class="btn btn-tool" data-tool="label" title="Label Room (L)">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="16" height="12" rx="1"/><path d="M6 10h8M6 13h5"/></svg>
+              </button>
+              <button class="btn btn-tool" data-tool="draw" title="Draw Wall (D)">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17L17 3M14 3h3v3"/></svg>
+              </button>
+              <button class="btn btn-tool" data-tool="erase" title="Erase (E)">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 4l8 8-5 5H5l-2-2 5-5M12 8l-4-4"/></svg>
+              </button>
+              <button class="btn btn-tool" data-tool="measure" title="Measure (M)">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 18L18 2M5 18v-3M8 18v-2M11 18v-3M14 18v-2"/></svg>
+              </button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <div class="toolbar-group">
+              <button class="btn btn-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h10a4 4 0 010 8H10M4 8l4-4M4 8l4 4"/></svg>
+              </button>
+              <button class="btn btn-tool" id="btn-redo" title="Redo (Ctrl+Y)" disabled>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 8H6a4 4 0 000 8h4M16 8l-4-4M16 8l-4 4"/></svg>
+              </button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <div class="toolbar-group">
+              <label class="toolbar-label">Slice Height</label>
+              <input type="range" class="slider" id="slice-height-slider" min="0" max="100" value="50" />
+              <span class="toolbar-value" id="slice-height-value">1.0m</span>
+            </div>
+            <div class="toolbar-spacer"></div>
+            <div class="toolbar-group">
+              <div class="floor-tabs" id="floor-tabs">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+          <div class="editor-canvas" id="editor-canvas">
+            <svg id="floor-plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+          <div class="editor-side-panel" id="editor-side-panel">
+            <h3>Room Properties</h3>
+            <div class="room-editor" id="room-editor" hidden>
+              <label class="form-label">Room Name</label>
+              <input type="text" class="form-input" id="room-name-input" placeholder="e.g., Living Room" />
+              <label class="form-label">Room Type</label>
+              <select class="form-select" id="room-type-select">
+                <option value="room">Room</option>
+                <option value="bedroom">Bedroom</option>
+                <option value="bathroom">Bathroom</option>
+                <option value="kitchen">Kitchen</option>
+                <option value="living">Living Room</option>
+                <option value="dining">Dining Room</option>
+                <option value="office">Office</option>
+                <option value="hallway">Hallway</option>
+                <option value="closet">Closet</option>
+                <option value="laundry">Laundry</option>
+                <option value="garage">Garage</option>
+                <option value="other">Other</option>
+              </select>
+              <div class="room-stats">
+                <div class="stat"><span class="stat-label">Area</span><span class="stat-value" id="room-area">—</span></div>
+                <div class="stat"><span class="stat-label">Perimeter</span><span class="stat-value" id="room-perimeter">—</span></div>
+              </div>
+              <button class="btn btn-danger btn-sm" id="btn-delete-room">Delete Room</button>
+            </div>
+            <div class="room-list-panel" id="room-list-panel">
+              <h4>All Rooms</h4>
+              <ul class="room-list" id="room-list-editor">
+                <!-- Populated dynamically -->
+              </ul>
+            </div>
+          </div>
+          <div class="editor-bottom-bar">
+            <button class="btn btn-secondary" id="btn-back-to-floors">Back</button>
+            <div class="editor-zoom">
+              <button class="btn btn-tool" id="btn-zoom-in" title="Zoom In">+</button>
+              <span id="zoom-level">100%</span>
+              <button class="btn btn-tool" id="btn-zoom-out" title="Zoom Out">−</button>
+              <button class="btn btn-tool" id="btn-zoom-fit" title="Fit to View">⊡</button>
+            </div>
+            <button class="btn btn-primary" id="btn-export">Export PDF</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 5: Export PDF -->
+      <section class="wizard-step" id="step-export">
+        <div class="step-content centered">
+          <div class="export-panel">
+            <svg class="export-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="8" y="4" width="32" height="40" rx="2"/>
+              <path d="M16 16h16M16 22h16M16 28h10"/>
+              <path d="M20 36h8" stroke-width="3"/>
+            </svg>
+            <h2>Export Floor Plan</h2>
+            <div class="export-options">
+              <label class="form-label">Project Name</label>
+              <input type="text" class="form-input" id="project-name" placeholder="My Floor Plan" />
+              <label class="form-label">Paper Size</label>
+              <select class="form-select" id="paper-size">
+                <option value="a4">A4 (210 × 297 mm)</option>
+                <option value="a3" selected>A3 (297 × 420 mm)</option>
+                <option value="letter">Letter (8.5 × 11 in)</option>
+                <option value="tabloid">Tabloid (11 × 17 in)</option>
+              </select>
+              <label class="form-label">Scale</label>
+              <select class="form-select" id="export-scale">
+                <option value="auto">Auto-fit</option>
+                <option value="50">1:50</option>
+                <option value="100">1:100</option>
+                <option value="200">1:200</option>
+              </select>
+            </div>
+            <div class="export-preview" id="export-preview">
+              <!-- PDF preview rendered here -->
+            </div>
+            <div class="step-actions">
+              <button class="btn btn-secondary" id="btn-back-to-edit">Back to Editor</button>
+              <button class="btn btn-primary btn-large" id="btn-save-pdf">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10 14l-5-5h3V3h4v6h3l-5 5zM3 16h14v2H3z"/></svg>
+                Save PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Error Modal -->
+    <div class="modal-overlay" id="error-modal" hidden>
+      <div class="modal">
+        <div class="modal-icon error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        </div>
+        <h3 class="modal-title" id="error-title">Error</h3>
+        <p class="modal-message" id="error-message"></p>
+        <button class="btn btn-primary" id="btn-error-dismiss">OK</button>
+      </div>
+    </div>
+
+    <!-- Label Dialog -->
+    <div class="modal-overlay" id="label-modal" hidden>
+      <div class="modal">
+        <h3 class="modal-title">Label Room</h3>
+        <label class="form-label">Room Name</label>
+        <input type="text" class="form-input" id="label-input" placeholder="e.g., Bedroom 1" />
+        <label class="form-label">Room Type</label>
+        <select class="form-select" id="label-type-select">
+          <option value="room">Room</option>
+          <option value="bedroom">Bedroom</option>
+          <option value="bathroom">Bathroom</option>
+          <option value="kitchen">Kitchen</option>
+          <option value="living">Living Room</option>
+          <option value="dining">Dining Room</option>
+          <option value="office">Office</option>
+          <option value="hallway">Hallway</option>
+          <option value="closet">Closet</option>
+          <option value="laundry">Laundry</option>
+          <option value="garage">Garage</option>
+          <option value="other">Other</option>
+        </select>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="btn-label-cancel">Cancel</button>
+          <button class="btn btn-primary" id="btn-label-save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
