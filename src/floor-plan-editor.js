@@ -64,6 +64,18 @@ export class FloorPlanEditor {
     this.zoom = d3.zoom()
       .scaleExtent([0.01, 1000])
       .filter((event) => {
+        // Prevent zoom/pan drag when clicking on interactive text notes or measurements
+        const isInteractive = event.target && (
+          event.target.classList.contains('text-note') ||
+          event.target.classList.contains('dimension-text') ||
+          event.target.classList.contains('dimension-line') ||
+          event.target.getAttribute('data-type') === 'text' ||
+          event.target.getAttribute('data-type') === 'measurement'
+        );
+        if (isInteractive) {
+          return event.type === 'wheel';
+        }
+
         // Pan tool or spacebar or middle-click allows click-drag panning
         if (this.currentTool === 'pan' || event.spaceKey || event.button === 1) {
           return true;
@@ -586,14 +598,14 @@ export class FloorPlanEditor {
         d3.drag()
           .filter((event) => self.currentTool === 'select' && !event.button)
           .on('start', (event) => {
-            if (event.sourceEvent) event.sourceEvent.stopPropagation();
             self.selectedItem = { type: 'text', data: note };
-            self.render();
+            self.labelLayer.selectAll('.text-note').classed('selected', false);
+            textElem.classed('selected', true).attr('fill', '#38bdf8');
           })
           .on('drag', (event) => {
             const [wx, wy] = d3.pointer(event, self.mainGroup.node());
             note.pos = [wx, wy];
-            d3.select(event.sourceEvent.target)
+            textElem
               .attr('x', wx)
               .attr('y', wy);
           })
