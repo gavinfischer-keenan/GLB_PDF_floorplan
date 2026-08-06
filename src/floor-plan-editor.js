@@ -251,9 +251,9 @@ export class FloorPlanEditor {
   }
 
   /**
-   * Show inline text input on canvas for adding custom text notes
+   * Show inline text input on canvas for adding or editing custom text notes
    */
-  _showTextInput(screenX, screenY, worldPos) {
+  _showTextInput(screenX, screenY, worldPos, existingNote = null) {
     // Remove existing input if any
     d3.select('.canvas-text-input').remove();
 
@@ -270,8 +270,11 @@ export class FloorPlanEditor {
       .style('top', `${relativeY}px`);
 
     const node = input.node();
+    if (existingNote) {
+      node.value = existingNote.text;
+    }
 
-    // Focus input after initial click completes
+    // Focus & select text
     setTimeout(() => {
       node.focus();
       node.select();
@@ -283,15 +286,25 @@ export class FloorPlanEditor {
       isCommitted = true;
       const val = node.value.trim();
       input.remove();
-      if (val) {
-        this._pushUndo();
+
+      this._pushUndo();
+
+      if (existingNote) {
+        if (val) {
+          existingNote.text = val;
+        } else {
+          // Empty text deletes the note
+          this.textNotes = this.textNotes.filter((n) => n.id !== existingNote.id);
+          this.selectedItem = null;
+        }
+      } else if (val) {
         this.textNotes.push({
           id: `t_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
           pos: worldPos,
           text: val,
         });
-        this.render();
       }
+      this.render();
     };
 
     input.on('keydown', (e) => {
@@ -557,7 +570,7 @@ export class FloorPlanEditor {
     for (const note of this.textNotes) {
       const isSelected = this.selectedItem?.type === 'text' && this.selectedItem?.data?.id === note.id;
 
-      this.labelLayer.append('text')
+      const textElem = this.labelLayer.append('text')
         .attr('class', `text-note${isSelected ? ' selected' : ''}`)
         .attr('data-type', 'text')
         .attr('data-id', note.id)
@@ -566,6 +579,35 @@ export class FloorPlanEditor {
         .attr('font-size', fontSize)
         .attr('fill', isSelected ? '#38bdf8' : '#facc15')
         .text(note.text);
+
+      // Attach D3 Drag for moving text in Select mode
+      const self = this;
+      textElem.call(
+        d3.drag()
+          .filter((event) => self.currentTool === 'select' && !event.button)
+          .on('start', (event) => {
+            if (event.sourceEvent) event.sourceEvent.stopPropagation();
+            self.selectedItem = { type: 'text', data: note };
+            self.render();
+          })
+          .on('drag', (event) => {
+            const [wx, wy] = d3.pointer(event, self.mainGroup.node());
+            note.pos = [wx, wy];
+            d3.select(event.sourceEvent.target)
+              .attr('x', wx)
+              .attr('y', wy);
+          })
+          .on('end', () => {
+            self._pushUndo();
+            self.render();
+          })
+      );
+
+      // Double click to edit existing text note
+      textElem.on('dblclick', (event) => {
+        event.stopPropagation();
+        self._showTextInput(event.clientX, event.clientY, note.pos, note);
+      });
     }
   }
 
