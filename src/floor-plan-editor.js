@@ -504,6 +504,7 @@ export class FloorPlanEditor {
       .attr('x', midX + nx * 2.2)
       .attr('y', midY + ny * 2.2)
       .attr('font-size', fontSize)
+      .attr('fill', isSelected ? '#38bdf8' : '#ffffff')
       .text(text);
   }
 

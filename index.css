@@ -622,6 +622,14 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
+#floor-plan-svg .dimension-text {
+  fill: #ffffff !important;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
 #floor-plan-svg .dimension-group {
   cursor: pointer;
 }
@@ -632,7 +640,7 @@ body {
 }
 
 #floor-plan-svg .dimension-group.selected .dimension-text {
-  fill: #38bdf8;
+  fill: #38bdf8 !important;
   font-weight: 700;
 }
 
