@@ -10,6 +10,7 @@ import { extractCrossSection } from './cross-section.js';
 import { detectRooms } from './room-detector.js';
 import { FloorPlanEditor } from './floor-plan-editor.js';
 import { exportPDF, savePDF } from './pdf-exporter.js';
+import { buildPlanData, savePlanData } from './plan-data-exporter.js';
 import { formatFeetInches } from './utils/geometry.js';
 
 // ============================================================
@@ -395,6 +396,35 @@ function initExportStep() {
 
   // Back button
   $('#btn-back-to-edit').onclick = () => goToStep(3);
+
+  // Save plan data button: rooms and walls as JSON for PaintingBusinessManager
+  $('#btn-save-plan-data').onclick = async () => {
+    const projectName = nameInput.value || 'Floor Plan';
+    try {
+      const edited = state.editor ? state.editor.getExportData() : null;
+      const data = buildPlanData({
+        projectName,
+        floor: {
+          name: state.floorPlan?.name,
+          floorHeight: state.detectedFloor?.floorHeight,
+          ceilingHeight: state.detectedFloor?.ceilingHeight,
+        },
+        walls: edited ? edited.walls : state.floorPlan?.walls,
+        textNotes: edited ? edited.textNotes : [],
+      });
+      const roomCount = data.floors[0].rooms.length;
+      const result = await savePlanData(data, `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_plan.json`);
+      if (result.success) {
+        const rooms = roomCount
+          ? `${roomCount} room${roomCount === 1 ? '' : 's'} and the walls saved.`
+          : 'Walls saved. No closed rooms were found, so the walls will show as a guide to draw rooms over.';
+        showSuccess('Plan Data Saved', `${rooms} In PaintingBusinessManager, open the quote's House plan step and choose "Import plan data".`);
+      }
+    } catch (err) {
+      console.error('Plan data export failed:', err);
+      showError('Export Failed', `Could not save plan data: ${err.message}`);
+    }
+  };
 
   // Save PDF button
   $('#btn-save-pdf').onclick = async () => {
