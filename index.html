@@ -3,22 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FloorPlan Extractor — GLB to Architectural Blueprint</title>
+  <title>Bay Scallop · FloorPlan Extractor</title>
   <meta name="description" content="Extract professional architectural floor plans from 3D scan GLB files. Detect floors, rooms, and generate blueprint PDFs." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="/index.css" />
 </head>
 <body>
   <div id="app">
+    <p class="local-note">Your GLB file is processed on this device. No scan uploads. <a href="./THIRD-PARTY-NOTICES.txt">Third-party notices</a></p>
     <!-- Header -->
     <header class="app-header">
       <div class="header-brand">
-        <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 21v-4h6v4M9 10h1M14 10h1M9 14h1M14 14h1"/>
-        </svg>
-        <h1>FloorPlan Extractor</h1>
+        <img class="app-logo" src="/brand/bay-scallop-logo.jpg" alt="">
+        <h1>Bay Scallop</h1><span class="app-subtitle">FloorPlan Extractor</span><a class="site-return" href="https://floorplan.11mosswood.us/">← TripoFisch</a>
       </div>
       <div class="header-steps">
         <div class="step-indicator" data-step="1">
@@ -60,6 +57,17 @@
             <button class="btn btn-primary" id="btn-browse">
               <span>Choose GLB File</span>
             </button>
+            <div class="sample-models" style="margin-top: 1.25rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 0.8rem; color: #94a3b8;">Or test with an instant sample scan:</span>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
+                <button type="button" class="btn btn-secondary btn-sample-model" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" data-sample="samples/sample_room.glb">
+                  Sample Room (245 KB)
+                </button>
+                <button type="button" class="btn btn-secondary btn-sample-model" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" data-sample="samples/sample_house.glb">
+                  Sample House (560 KB)
+                </button>
+              </div>
+            </div>
           </div>
           <div class="loading-overlay" id="loading-overlay" hidden>
             <div class="loading-spinner"></div>

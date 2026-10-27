@@ -1,6 +1,10 @@
+# Bay Scallop · FloorPlan Extractor
+
+Public edition: https://floorplan.11mosswood.us/ (app at `/app/`). Files and geometry are processed locally in the browser. See [DEPLOYMENT.md](DEPLOYMENT.md) for repeatable builds.
+
 # FloorPlan Extractor — GLB to Architectural Blueprint
 
-FloorPlan Extractor is a web-based, client-side tool designed to automatically extract professional 2D architectural blueprint PDF floor plans from 3D scan files in `.glb` format. Using Three.js for 3D processing, D3.js for interactive SVG layout editing, and jsPDF for vector rendering, it guides users through a clean, 5-step wizard interface.
+FloorPlan Extractor is a web-based, client-side tool designed to automatically extract professional 2D architectural blueprint PDF floor plans from 3D scan files in `.glb` format. Using Three.js for 3D processing, D3.js for interactive SVG layout editing, and jsPDF for vector rendering, it guides users through a clean, 4-step wizard interface.
 
 ---
 
@@ -14,13 +18,12 @@ FloorPlan Extractor is a web-based, client-side tool designed to automatically e
 
 ---
 
-## The 5-Step Pipeline
+## The 4-Step Pipeline
 
 1. **Load**: Select a `.glb` file. The app validates and parses the 3D scene geometry.
 2. **Orient**: Confirm the "up" vector of the model (detected via face normal distribution) to align coordinate systems.
-3. **Floors**: Slices the model to locate floor-ceiling heights and selects which levels to process.
-4. **Edit**: Reviews auto-detected wall segments and room structures, allows manual modification, and adjusts slice heights.
-5. **Export**: Customizes scale, paper size, and metadata, generating a vector-quality PDF blueprint.
+3. **Edit**: Reviews auto-detected wall segments and room structures, allows manual modification, and adjusts slice heights.
+4. **Export**: Customizes scale, paper size, and metadata, generating a vector-quality PDF blueprint.
 
 ---
 

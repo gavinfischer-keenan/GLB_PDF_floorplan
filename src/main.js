@@ -108,6 +108,31 @@ function initLoadStep() {
     }
   });
 
+  // Instant sample scan models
+  $$('.btn-sample-model').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const samplePath = btn.dataset.sample;
+      try {
+        uploadZone.hidden = true;
+        loadingOverlay.hidden = false;
+        progressFill.style.width = '30%';
+        const response = await fetch(samplePath);
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const blob = await response.blob();
+        const filename = samplePath.split('/').pop();
+        const sampleFile = new File([blob], filename, { type: 'model/gltf-binary' });
+        await handleFile(sampleFile);
+      } catch (err) {
+        console.error('Failed to load sample scan:', err);
+        showError('Sample Load Error', "Could not load sample model: " + err.message);
+        uploadZone.hidden = false;
+        loadingOverlay.hidden = true;
+        progressFill.style.width = '0%';
+      }
+    });
+  });
+
   async function handleFile(file) {
     if (!file.name.toLowerCase().endsWith('.glb')) {
       showError('Invalid File', 'Please select a .glb file.');

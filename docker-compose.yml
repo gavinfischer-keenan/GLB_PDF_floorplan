@@ -1,0 +1,9 @@
+services:
+  glb-pdf-floorplan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glb-pdf-floorplan
+    restart: unless-stopped
+    ports:
+      - "8081:80"
