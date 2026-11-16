@@ -5,165 +5,172 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
  * Class to load GLB files and extract mesh geometry data in world space.
  */
 export class GLBLoader {
-    constructor() {
-        /**
-         * Callback function for progress updates.
-         * @type {((progress: number) => void) | null}
-         */
-        this.onProgress = null;
-    }
-
+  constructor() {
     /**
-     * Loads a GLB file and extracts mesh data.
-     * @param {File} file - The file to load.
-     * @returns {Promise<Object>} An object containing scene and extracted mesh data.
+     * Callback function for progress updates.
+     * @type {((progress: number) => void) | null}
      */
-    async load(file) {
-        if (!(file instanceof File)) {
-            throw new Error('Invalid input: Expected a File object.');
-        }
+    this.onProgress = null;
+  }
 
-        const url = URL.createObjectURL(file);
-        const loader = new GLTFLoader();
-
-        try {
-            const gltf = await new Promise((resolve, reject) => {
-                loader.load(
-                    url,
-                    (gltf) => resolve(gltf),
-                    (xhr) => {
-                        if (this.onProgress && xhr.total > 0) {
-                            const percent = (xhr.loaded / xhr.total) * 100;
-                            this.onProgress(percent);
-                        }
-                    },
-                    (error) => reject(new Error(`Failed to load GLB: ${error.message}`))
-                );
-            });
-
-            return this._processGLTF(gltf);
-        } finally {
-            URL.revokeObjectURL(url);
-        }
+  /**
+   * Loads a GLB file and extracts mesh data.
+   * @param {File} file - The file to load.
+   * @returns {Promise<Object>} An object containing scene and extracted mesh data.
+   */
+  async load(file) {
+    if (!(file instanceof File)) {
+      throw new Error('Invalid input: Expected a File object.');
     }
 
-    /**
-     * Processes the loaded GLTF scene to extract meshes and bounds.
-     * @param {Object} gltf - The loaded GLTF object.
-     * @returns {Object} Extracted data.
-     * @private
-     */
-    _processGLTF(gltf) {
-        const scene = gltf.scene;
-        
-        // Ensure world matrices are updated before extraction
-        scene.updateMatrixWorld(true);
+    const url = URL.createObjectURL(file);
+    const loader = new GLTFLoader();
 
-        const meshes = [];
-        const bounds = new THREE.Box3();
-        let totalTriangles = 0;
-
-        scene.traverse((child) => {
-            if (child.isMesh) {
-                const meshData = this._extractMeshData(child);
-                if (meshData) {
-                    meshes.push(meshData);
-                    totalTriangles += meshData.triangleCount;
-                    
-                    // Expand bounds
-                    const geometry = child.geometry;
-                    geometry.computeBoundingBox();
-                    const box = geometry.boundingBox.clone();
-                    box.applyMatrix4(child.matrixWorld);
-                    bounds.union(box);
-                }
+    try {
+      const gltf = await new Promise((resolve, reject) => {
+        loader.load(
+          url,
+          (loaded) => resolve(loaded),
+          (xhr) => {
+            if (this.onProgress && xhr.total > 0) {
+              const percent = (xhr.loaded / xhr.total) * 100;
+              this.onProgress(percent);
             }
-        });
+          },
+          (error) => reject(new Error(`Failed to load GLB: ${error.message}`))
+        );
+      });
 
-        // If bounds are empty (e.g. no meshes), set them to 0
-        if (bounds.isEmpty()) {
-            bounds.set(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0));
+      return this._processGLTF(gltf);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  /**
+   * Processes the loaded GLTF scene to extract meshes and bounds.
+   * @param {Object} gltf - The loaded GLTF object.
+   * @returns {Object} Extracted data.
+   * @private
+   */
+  _processGLTF(gltf) {
+    const scene = gltf.scene;
+    scene.updateMatrixWorld(true);
+
+    const meshes = [];
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let totalTriangles = 0;
+
+    scene.traverse((child) => {
+      if (child.isMesh) {
+        const meshData = this._extractMeshData(child);
+        if (meshData) {
+          meshes.push(meshData);
+          totalTriangles += meshData.triangleCount;
+          const b = meshData.bounds;
+          if (b.min[0] < minX) minX = b.min[0];
+          if (b.min[1] < minY) minY = b.min[1];
+          if (b.min[2] < minZ) minZ = b.min[2];
+          if (b.max[0] > maxX) maxX = b.max[0];
+          if (b.max[1] > maxY) maxY = b.max[1];
+          if (b.max[2] > maxZ) maxZ = b.max[2];
         }
+      }
+    });
 
-        return {
-            scene,
-            meshes,
-            bounds: {
-                min: { x: bounds.min.x, y: bounds.min.y, z: bounds.min.z },
-                max: { x: bounds.max.x, y: bounds.max.y, z: bounds.max.z }
-            },
-            totalTriangles,
-            meshCount: meshes.length
-        };
+    if (meshes.length === 0) {
+      minX = minY = minZ = 0;
+      maxX = maxY = maxZ = 0;
     }
 
-    /**
-     * Extracts world-space geometry data from a single mesh.
-     * @param {THREE.Mesh} mesh - The mesh to extract data from.
-     * @returns {Object|null} Extracted mesh data.
-     * @private
-     */
-    _extractMeshData(mesh) {
-        const geometry = mesh.geometry;
-        const positionAttribute = geometry.attributes.position;
-        if (!positionAttribute) return null;
+    return {
+      scene,
+      meshes,
+      bounds: {
+        min: { x: minX, y: minY, z: minZ },
+        max: { x: maxX, y: maxY, z: maxZ },
+      },
+      totalTriangles,
+      meshCount: meshes.length,
+    };
+  }
 
-        const normalAttribute = geometry.attributes.normal;
-        
-        const vertexCount = positionAttribute.count;
-        const positions = new Float32Array(vertexCount * 3);
-        const normals = new Float32Array(vertexCount * 3); // Defaults to 0 if no normals
+  /**
+   * Extracts world-space geometry data and bounding box from a single mesh.
+   * @param {THREE.Mesh} mesh - The mesh to extract data from.
+   * @returns {Object|null} Extracted mesh data.
+   * @private
+   */
+  _extractMeshData(mesh) {
+    const geometry = mesh.geometry;
+    const positionAttribute = geometry.attributes.position;
+    if (!positionAttribute || positionAttribute.count === 0) return null;
 
-        const matrixWorld = mesh.matrixWorld;
-        const normalMatrix = new THREE.Matrix3().getNormalMatrix(matrixWorld);
+    const normalAttribute = geometry.attributes.normal;
+    const vertexCount = positionAttribute.count;
+    const positions = new Float32Array(vertexCount * 3);
+    const normals = new Float32Array(vertexCount * 3);
 
-        const vec3 = new THREE.Vector3();
+    const matrixWorld = mesh.matrixWorld;
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(matrixWorld);
+    const vec3 = new THREE.Vector3();
 
-        // Extract and transform positions and normals
-        for (let i = 0; i < vertexCount; i++) {
-            // Position
-            vec3.fromBufferAttribute(positionAttribute, i);
-            vec3.applyMatrix4(matrixWorld);
-            positions[i * 3] = vec3.x;
-            positions[i * 3 + 1] = vec3.y;
-            positions[i * 3 + 2] = vec3.z;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
 
-            // Normal
-            if (normalAttribute) {
-                vec3.fromBufferAttribute(normalAttribute, i);
-                vec3.applyMatrix3(normalMatrix).normalize();
-                normals[i * 3] = vec3.x;
-                normals[i * 3 + 1] = vec3.y;
-                normals[i * 3 + 2] = vec3.z;
-            }
-        }
+    for (let i = 0; i < vertexCount; i++) {
+      vec3.fromBufferAttribute(positionAttribute, i).applyMatrix4(matrixWorld);
+      const px = vec3.x;
+      const py = vec3.y;
+      const pz = vec3.z;
+      const base = i * 3;
+      positions[base] = px;
+      positions[base + 1] = py;
+      positions[base + 2] = pz;
 
-        // Handle indices
-        let indices = geometry.index ? geometry.index.array : null;
-        let triangleCount = 0;
+      if (px < minX) minX = px;
+      if (py < minY) minY = py;
+      if (pz < minZ) minZ = pz;
+      if (px > maxX) maxX = px;
+      if (py > maxY) maxY = py;
+      if (pz > maxZ) maxZ = pz;
 
-        if (indices) {
-            triangleCount = Math.floor(indices.length / 3);
-            // Ensure indices are either Uint16Array or Uint32Array
-            if (!(indices instanceof Uint16Array) && !(indices instanceof Uint32Array)) {
-                indices = vertexCount > 65535 ? new Uint32Array(indices) : new Uint16Array(indices);
-            }
-        } else {
-            // Generate sequential indices for non-indexed geometry
-            triangleCount = Math.floor(vertexCount / 3);
-            const indexArray = vertexCount > 65535 ? new Uint32Array(vertexCount) : new Uint16Array(vertexCount);
-            for (let i = 0; i < vertexCount; i++) {
-                indexArray[i] = i;
-            }
-            indices = indexArray;
-        }
-
-        return {
-            positions,
-            normals,
-            indices,
-            triangleCount,
-            name: mesh.name || 'Unnamed Mesh'
-        };
+      if (normalAttribute) {
+        vec3.fromBufferAttribute(normalAttribute, i).applyMatrix3(normalMatrix).normalize();
+        normals[base] = vec3.x;
+        normals[base + 1] = vec3.y;
+        normals[base + 2] = vec3.z;
+      }
     }
+
+    let indices = geometry.index ? geometry.index.array : null;
+    let triangleCount = 0;
+
+    if (indices) {
+      triangleCount = Math.floor(indices.length / 3);
+      if (!(indices instanceof Uint16Array) && !(indices instanceof Uint32Array)) {
+        indices = vertexCount > 65535 ? new Uint32Array(indices) : new Uint16Array(indices);
+      }
+    } else {
+      triangleCount = Math.floor(vertexCount / 3);
+      const indexArray = vertexCount > 65535 ? new Uint32Array(vertexCount) : new Uint16Array(vertexCount);
+      for (let i = 0; i < vertexCount; i++) {
+        indexArray[i] = i;
+      }
+      indices = indexArray;
+    }
+
+    return {
+      positions,
+      normals,
+      indices,
+      triangleCount,
+      bounds: {
+        min: [minX, minY, minZ],
+        max: [maxX, maxY, maxZ],
+      },
+      name: mesh.name || 'Unnamed Mesh',
+    };
+  }
 }

@@ -17,6 +17,14 @@ export class Viewport3D {
     this.slicePlane = null;
     this.floorPlanes = [];
 
+    // Shared neutral material reused across models to avoid per-mesh allocations
+    this._overrideMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8899aa,
+      roughness: 0.7,
+      metalness: 0.1,
+      side: THREE.DoubleSide,
+    });
+
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -62,7 +70,6 @@ export class Viewport3D {
     // Handle resize
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
-    // Use ResizeObserver for container-specific resizing
     this._resizeObserver = new ResizeObserver(() => this.resize());
     this._resizeObserver.observe(container);
 
@@ -76,32 +83,46 @@ export class Viewport3D {
   }
 
   /**
+   * Dispose geometries and non-shared materials on an object subtree.
+   * @param {THREE.Object3D} root
+   * @private
+   */
+  _disposeObject(root) {
+    if (!root) return;
+    root.traverse((obj) => {
+      if (obj.geometry) {
+        obj.geometry.dispose();
+      }
+      if (obj.material && obj.material !== this._overrideMaterial) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => m.dispose());
+        } else {
+          obj.material.dispose();
+        }
+      }
+    });
+  }
+
+  /**
    * Set the 3D model scene from the GLB loader
    * @param {THREE.Group} modelScene - The loaded GLB scene
    * @param {{min: {x,y,z}, max: {x,y,z}}} bounds - Model bounding box
    */
   setModel(modelScene, bounds) {
-    // Remove old model
     if (this.model) {
       this.scene.remove(this.model);
+      this._disposeObject(this.model);
     }
 
     this.model = modelScene;
     this.scene.add(this.model);
 
-    // Apply a neutral material override for better visibility
     this.model.traverse((child) => {
       if (child.isMesh) {
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0x8899aa,
-          roughness: 0.7,
-          metalness: 0.1,
-          side: THREE.DoubleSide,
-        });
+        child.material = this._overrideMaterial;
       }
     });
 
-    // Frame camera to fit the model
     this._frameBounds(bounds);
   }
 
@@ -110,34 +131,35 @@ export class Viewport3D {
    * @param {string} upAxis - e.g., '+y', '-z', '+x'
    */
   showUpArrow(upAxis) {
-    // Remove old arrow
     if (this.upArrow) {
       this.scene.remove(this.upArrow);
+      this._disposeObject(this.upArrow);
     }
 
     const dir = this._axisToVector(upAxis).normalize();
     const origin = new THREE.Vector3(0, 0, 0);
 
-    // Compute model center for arrow placement
     if (this.model) {
       const box = new THREE.Box3().setFromObject(this.model);
       box.getCenter(origin);
     }
 
     const length = 2;
-    const arrowColor = 0x10b981; // Green
+    const arrowColor = 0x10b981;
     this.upArrow = new THREE.ArrowHelper(dir, origin, length, arrowColor, 0.4, 0.2);
     this.scene.add(this.upArrow);
   }
 
   /**
    * Show horizontal planes at detected floor levels
-   * @param {Array<{floorHeight: number, name: string}>} floors
+   * @param {Array<{floorHeight: number, sliceHeight: number, name: string}>} floors
    * @param {string} upAxis
    */
   showFloorPlanes(floors, upAxis) {
-    // Remove existing planes
-    this.floorPlanes.forEach((p) => this.scene.remove(p));
+    this.floorPlanes.forEach((p) => {
+      this.scene.remove(p);
+      this._disposeObject(p);
+    });
     this.floorPlanes = [];
 
     const axisIndex = this._axisIndex(upAxis);
@@ -154,16 +176,12 @@ export class Viewport3D {
       });
       const plane = new THREE.Mesh(geometry, material);
 
-      // Position and orient based on up axis
       if (axisIndex === 1) {
-        // Y-up: plane lies in XZ
         plane.rotation.x = -Math.PI / 2;
         plane.position.y = floor.sliceHeight;
       } else if (axisIndex === 2) {
-        // Z-up: plane lies in XY (no rotation needed, PlaneGeometry is in XY)
         plane.position.z = floor.sliceHeight;
       } else {
-        // X-up: plane lies in YZ
         plane.rotation.y = Math.PI / 2;
         plane.position.x = floor.sliceHeight;
       }
@@ -171,7 +189,6 @@ export class Viewport3D {
       this.scene.add(plane);
       this.floorPlanes.push(plane);
 
-      // Add a wireframe edge
       const wireGeo = new THREE.EdgesGeometry(geometry);
       const wireMat = new THREE.LineBasicMaterial({
         color: colors[i % colors.length],
@@ -200,7 +217,7 @@ export class Viewport3D {
       bounds.max.y - bounds.min.y,
       bounds.max.z - bounds.min.z
     );
-    const maxDim = Math.max(size.x, size.y, size.z);
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
     const distance = maxDim * 1.5;
 
     this.camera.position.set(
@@ -209,8 +226,8 @@ export class Viewport3D {
       center.z + distance * 0.6
     );
     this.controls.target.copy(center);
-    this.camera.near = maxDim * 0.001;
-    this.camera.far = maxDim * 10;
+    this.camera.near = Math.max(0.01, maxDim * 0.001);
+    this.camera.far = Math.max(100, maxDim * 10);
     this.camera.updateProjectionMatrix();
     this.controls.update();
   }
@@ -263,8 +280,14 @@ export class Viewport3D {
     this._animating = false;
     this._resizeObserver.disconnect();
     window.removeEventListener('resize', this._onResize);
+    if (this.model) this._disposeObject(this.model);
+    if (this.upArrow) this._disposeObject(this.upArrow);
+    this.floorPlanes.forEach((p) => this._disposeObject(p));
+    this._overrideMaterial.dispose();
     this.controls.dispose();
     this.renderer.dispose();
-    this.container.removeChild(this.renderer.domElement);
+    if (this.renderer.domElement.parentNode === this.container) {
+      this.container.removeChild(this.renderer.domElement);
+    }
   }
 }

@@ -5,38 +5,67 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bay Scallop · FloorPlan Extractor</title>
   <meta name="description" content="Extract professional architectural floor plans from 3D scan GLB files. Detect floors, rooms, and generate blueprint PDFs." />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="/index.css" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="/index.css" />
 </head>
 <body>
   <div id="app">
     <p class="local-note">Your GLB file is processed on this device. No scan uploads. <a href="./THIRD-PARTY-NOTICES.txt">Third-party notices</a></p>
+
     <!-- Header -->
     <header class="app-header">
       <div class="header-brand">
-        <img class="app-logo" src="/brand/bay-scallop-logo.jpg" alt="">
-        <h1>Bay Scallop</h1><span class="app-subtitle">FloorPlan Extractor</span><a class="site-return" href="https://floorplan.11mosswood.us/">← TripoFisch</a>
+        <img class="app-logo" src="/brand/bay-scallop-logo.jpg" alt="Bay Scallop logo" />
+        <div class="header-title-group">
+          <div class="header-title-row">
+            <h1>Bay Scallop</h1>
+            <span class="app-subtitle">FloorPlan Extractor</span>
+          </div>
+          <a class="site-return" href="https://floorplan.11mosswood.us/">← TripoFisch</a>
+        </div>
       </div>
-      <div class="header-steps">
-        <div class="step-indicator" data-step="1">
+
+      <nav class="header-steps" aria-label="Pipeline steps">
+        <button type="button" class="step-indicator active" data-step="1">
           <span class="step-number">1</span>
           <span class="step-label">Load</span>
-        </div>
-        <div class="step-connector"></div>
-        <div class="step-indicator" data-step="2">
+        </button>
+        <div class="step-connector" aria-hidden="true"></div>
+        <button type="button" class="step-indicator" data-step="2">
           <span class="step-number">2</span>
           <span class="step-label">Orient</span>
-        </div>
-        <div class="step-connector"></div>
-        <div class="step-indicator" data-step="3">
+        </button>
+        <div class="step-connector" aria-hidden="true"></div>
+        <button type="button" class="step-indicator" data-step="3">
           <span class="step-number">3</span>
           <span class="step-label">Edit</span>
-        </div>
-        <div class="step-connector"></div>
-        <div class="step-indicator" data-step="4">
+        </button>
+        <div class="step-connector" aria-hidden="true"></div>
+        <button type="button" class="step-indicator" data-step="4">
           <span class="step-number">4</span>
           <span class="step-label">Export</span>
-        </div>
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <button type="button" class="btn btn-secondary btn-sm btn-palette-trigger" id="btn-command-palette" title="Open Command Palette (Ctrl+K)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14" aria-hidden="true">
+            <circle cx="9" cy="9" r="6" />
+            <path d="M13.5 13.5L17 17" />
+          </svg>
+          <span class="palette-trigger-label">Actions</span>
+          <kbd class="header-kbd">Ctrl+K</kbd>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm btn-icon-label" id="btn-settings" title="Settings (,)">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="15" height="15" aria-hidden="true">
+            <circle cx="10" cy="10" r="3" />
+            <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" />
+          </svg>
+          <span class="header-btn-text">Settings</span>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm btn-icon-only" id="btn-shortcuts-help" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts">
+          ?
+        </button>
       </div>
     </header>
 
@@ -46,42 +75,57 @@
       <!-- Step 1: Load GLB -->
       <section class="wizard-step active" id="step-load">
         <div class="step-content centered">
-          <div class="upload-zone" id="upload-zone">
-            <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M24 32V12M16 20l8-8 8 8M8 36h32"/>
-              <rect x="4" y="4" width="40" height="40" rx="4"/>
-            </svg>
-            <h2>Load 3D Scan</h2>
-            <p class="upload-hint">Drag & drop a <strong>.glb</strong> file here, or click to browse</p>
-            <input type="file" id="file-input" accept=".glb" hidden />
-            <button class="btn btn-primary" id="btn-browse">
-              <span>Choose GLB File</span>
-            </button>
-            <div class="sample-models" style="margin-top: 1.25rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
-              <span style="font-size: 0.8rem; color: #94a3b8;">Or test with an instant sample scan:</span>
-              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center;">
-                <button type="button" class="btn btn-secondary btn-sample-model" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" data-sample="samples/sample_room.glb">
-                  Sample Room (245 KB)
-                </button>
-                <button type="button" class="btn btn-secondary btn-sample-model" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" data-sample="samples/sample_house.glb">
-                  Sample House (560 KB)
-                </button>
+          <div class="load-layout">
+            <div class="upload-zone" id="upload-zone" tabindex="0" role="button" aria-label="Upload a GLB 3D scan file">
+              <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M24 32V12M16 20l8-8 8 8M8 36h32"/>
+                <rect x="4" y="4" width="40" height="40" rx="4"/>
+              </svg>
+              <h2>Load 3D Scan</h2>
+              <p class="upload-hint">Drag &amp; drop a <strong>.glb</strong> file here, or click to browse</p>
+              <input type="file" id="file-input" accept=".glb" hidden />
+              <button type="button" class="btn btn-primary" id="btn-browse">
+                <span>Choose GLB File</span>
+              </button>
+              <div class="sample-models">
+                <span class="sample-models-label">Or test with an instant sample scan:</span>
+                <div class="sample-models-buttons">
+                  <button type="button" class="btn btn-secondary btn-sm btn-sample-model" data-sample="samples/sample_room.glb">
+                    Sample Room (245 KB)
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-sample-model" data-sample="samples/sample_house.glb">
+                    Sample House (560 KB)
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="loading-overlay" id="loading-overlay" hidden>
-            <div class="loading-spinner"></div>
-            <p class="loading-text">Parsing 3D model...</p>
-            <div class="progress-bar">
-              <div class="progress-fill" id="progress-fill"></div>
+
+            <div class="loading-overlay" id="loading-overlay" hidden>
+              <div class="loading-spinner"></div>
+              <p class="loading-text">Parsing 3D model...</p>
+              <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
             </div>
+
+            <!-- Recent Scans & Plans -->
+            <section class="recent-scans-card" aria-label="Recent scans and plans">
+              <div class="recent-scans-header">
+                <div>
+                  <h3>Recent Scans &amp; Plans</h3>
+                  <p class="recent-scans-subtitle">Saved locally in your browser for quick resume</p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-recent" hidden>Clear History</button>
+              </div>
+              <div class="recent-scans-list" id="recent-scans-list"></div>
+            </section>
           </div>
         </div>
       </section>
 
       <!-- Step 2: Confirm Up Direction -->
       <section class="wizard-step" id="step-orient">
-        <div class="step-content split">
+        <div class="step-content split" id="orient-split-view">
           <div class="viewport-container" id="viewport-3d"></div>
           <div class="side-panel">
             <h2>Confirm Orientation</h2>
@@ -89,12 +133,12 @@
             <div class="orientation-controls">
               <h3>Up Direction</h3>
               <div class="axis-selector">
-                <button class="btn btn-axis" data-axis="+y">Y+ <span class="axis-hint">Default</span></button>
-                <button class="btn btn-axis" data-axis="-y">Y−</button>
-                <button class="btn btn-axis" data-axis="+z">Z+</button>
-                <button class="btn btn-axis" data-axis="-z">Z−</button>
-                <button class="btn btn-axis" data-axis="+x">X+</button>
-                <button class="btn btn-axis" data-axis="-x">X−</button>
+                <button type="button" class="btn btn-axis" data-axis="+y">Y+ <span class="axis-hint">Default</span></button>
+                <button type="button" class="btn btn-axis" data-axis="-y">Y−</button>
+                <button type="button" class="btn btn-axis" data-axis="+z">Z+</button>
+                <button type="button" class="btn btn-axis" data-axis="-z">Z−</button>
+                <button type="button" class="btn btn-axis" data-axis="+x">X+</button>
+                <button type="button" class="btn btn-axis" data-axis="-x">X−</button>
               </div>
               <div class="detection-info" id="detection-info">
                 <div class="info-badge">
@@ -116,69 +160,91 @@
               </div>
             </div>
             <div class="step-actions">
-              <button class="btn btn-secondary" id="btn-back-to-load">Back</button>
-              <button class="btn btn-primary" id="btn-confirm-orient">Confirm & Detect Floors</button>
+              <button type="button" class="btn btn-secondary" id="btn-back-to-load">Back</button>
+              <button type="button" class="btn btn-primary" id="btn-confirm-orient">Confirm &amp; Detect Floors</button>
             </div>
           </div>
         </div>
+        <div class="step-content centered" id="orient-empty-view" hidden></div>
       </section>
-
-
 
       <!-- Step 3: Edit Floor Plans -->
       <section class="wizard-step" id="step-edit">
         <div class="step-content full-editor">
           <div class="editor-toolbar" id="editor-toolbar">
-            <div class="toolbar-group">
-              <button class="btn btn-tool active" data-tool="select" title="Select (V)">
+            <div class="toolbar-group" role="group" aria-label="Drawing tools">
+              <button type="button" class="btn btn-tool active" data-tool="select" title="Select (V)" aria-label="Select tool">
                 <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2l12 8.5L10 12l-2 6z"/></svg>
               </button>
-              <button class="btn btn-tool" data-tool="pan" title="Pan / Move Map (H)">
+              <button type="button" class="btn btn-tool" data-tool="pan" title="Pan / Move Map (H)" aria-label="Pan tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 11V5a1 1 0 012 0v5M9 10V3a1 1 0 012 0v7M11 10V4a1 1 0 012 0v6M13 11V6a1 1 0 012 0v7a5 5 0 01-5 5h-1a5 5 0 01-5-5v-3a1 1 0 012 0v2"/></svg>
               </button>
-              <button class="btn btn-tool" data-tool="text" title="Add Text Note (T)">
+              <button type="button" class="btn btn-tool" data-tool="text" title="Add Text Note (T)" aria-label="Add text note tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12M10 4v12M7 16h6"/></svg>
               </button>
-              <button class="btn btn-tool" data-tool="draw" title="Draw Wall (D)">
+              <button type="button" class="btn btn-tool" data-tool="draw" title="Draw Wall (D)" aria-label="Draw wall tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17L17 3M14 3h3v3"/></svg>
               </button>
-              <button class="btn btn-tool" data-tool="measure" title="Measure (M)">
+              <button type="button" class="btn btn-tool" data-tool="measure" title="Measure (M)" aria-label="Measure tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 18L18 2M5 18v-3M8 18v-2M11 18v-3M14 18v-2"/></svg>
               </button>
-              <button class="btn btn-tool" data-tool="erase" title="Erase / Delete (E)">
+              <button type="button" class="btn btn-tool" data-tool="erase" title="Erase / Delete (E)" aria-label="Erase tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 14l8-8M6 6l8 8"/></svg>
               </button>
             </div>
-            <div class="toolbar-divider"></div>
-            <div class="toolbar-group">
-              <button class="btn btn-tool" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+            <div class="toolbar-divider" aria-hidden="true"></div>
+            <div class="toolbar-group" role="group" aria-label="History">
+              <button type="button" class="btn btn-tool" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h10a4 4 0 010 8H10M4 8l4-4M4 8l4 4"/></svg>
               </button>
-              <button class="btn btn-tool" id="btn-redo" title="Redo (Ctrl+Y)" disabled>
+              <button type="button" class="btn btn-tool" id="btn-redo" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 8H6a4 4 0 000 8h4M16 8l-4-4M16 8l-4 4"/></svg>
               </button>
             </div>
-            <div class="toolbar-divider"></div>
-            <div class="toolbar-group">
-              <label class="toolbar-label">Slice Height</label>
+            <div class="toolbar-divider" aria-hidden="true"></div>
+            <div class="toolbar-group toolbar-slice-group">
+              <label class="toolbar-label" for="slice-height-slider">Slice Height</label>
               <input type="range" class="slider" id="slice-height-slider" min="0" max="100" value="50" />
-              <span class="toolbar-value" id="slice-height-value">1.0m</span>
+              <span class="toolbar-value" id="slice-height-value">3' 3"</span>
             </div>
             <div class="toolbar-spacer"></div>
+            <div class="toolbar-group">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-insert-room" title="Insert a 4m × 3m closed room template">
+                + Room Template
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-rooms" aria-expanded="true">
+                Rooms (0)
+              </button>
+            </div>
           </div>
-          <div class="editor-canvas" id="editor-canvas">
-            <svg id="floor-plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+
+          <div class="editor-workspace">
+            <div class="editor-canvas" id="editor-canvas">
+              <svg id="floor-plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+              <div class="editor-empty-overlay" id="editor-empty-state" hidden></div>
+            </div>
+
+            <aside class="rooms-panel" id="editor-rooms-panel" aria-label="Detected rooms schedule">
+              <div class="rooms-panel-header">
+                <div>
+                  <h3>Detected Rooms</h3>
+                  <p class="rooms-summary-counts" id="rooms-summary-counts">0 rooms · 0 walls</p>
+                </div>
+                <button type="button" class="btn btn-tool btn-close-rooms" id="btn-close-rooms" aria-label="Hide rooms panel">×</button>
+              </div>
+              <div class="rooms-list-container" id="rooms-list-container"></div>
+            </aside>
           </div>
 
           <div class="editor-bottom-bar">
-            <button class="btn btn-secondary" id="btn-back-to-orient">Back</button>
+            <button type="button" class="btn btn-secondary" id="btn-back-to-orient">Back</button>
             <div class="editor-zoom">
-              <button class="btn btn-tool" id="btn-zoom-in" title="Zoom In">+</button>
+              <button type="button" class="btn btn-tool" id="btn-zoom-in" title="Zoom In (+)" aria-label="Zoom in">+</button>
               <span id="zoom-level">100%</span>
-              <button class="btn btn-tool" id="btn-zoom-out" title="Zoom Out">−</button>
-              <button class="btn btn-tool" id="btn-zoom-fit" title="Fit to View">⊡</button>
+              <button type="button" class="btn btn-tool" id="btn-zoom-out" title="Zoom Out (-)" aria-label="Zoom out">−</button>
+              <button type="button" class="btn btn-tool" id="btn-zoom-fit" title="Fit to View (F)" aria-label="Fit to view">⊡</button>
             </div>
-            <button class="btn btn-primary" id="btn-export">Export PDF</button>
+            <button type="button" class="btn btn-primary" id="btn-export">Export PDF</button>
           </div>
         </div>
       </section>
@@ -187,40 +253,69 @@
       <section class="wizard-step" id="step-export">
         <div class="step-content centered">
           <div class="export-panel">
-            <svg class="export-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="8" y="4" width="32" height="40" rx="2"/>
-              <path d="M16 16h16M16 22h16M16 28h10"/>
-              <path d="M20 36h8" stroke-width="3"/>
-            </svg>
-            <h2>Export Floor Plan</h2>
-            <div class="export-options">
-              <label class="form-label">Project Name</label>
-              <input type="text" class="form-input" id="project-name" placeholder="My Floor Plan" />
-              <label class="form-label">Paper Size</label>
-              <select class="form-select" id="paper-size">
-                <option value="a4">A4 (210 × 297 mm)</option>
-                <option value="a3" selected>A3 (297 × 420 mm)</option>
-                <option value="letter">Letter (8.5 × 11 in)</option>
-                <option value="tabloid">Tabloid (11 × 17 in)</option>
-              </select>
-              <label class="form-label">Scale</label>
-              <select class="form-select" id="export-scale">
-                <option value="auto">Auto-fit</option>
-                <option value="50">1:50</option>
-                <option value="100">1:100</option>
-                <option value="200">1:200</option>
-              </select>
+            <div class="export-header">
+              <svg class="export-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="8" y="4" width="32" height="40" rx="2"/>
+                <path d="M16 16h16M16 22h16M16 28h10"/>
+                <path d="M20 36h8" stroke-width="3"/>
+              </svg>
+              <div>
+                <h2>Export Floor Plan</h2>
+                <p class="panel-description">Preview your scaled blueprint sheet, inspect detected room measurements, and save PDF or JSON plan data.</p>
+              </div>
             </div>
-            <div class="export-preview" id="export-preview">
-              <!-- PDF preview rendered here -->
+
+            <div class="export-grid">
+              <div class="export-config-col">
+                <div class="export-options">
+                  <div class="form-field">
+                    <label class="form-label" for="project-name">Project Name</label>
+                    <input type="text" class="form-input" id="project-name" placeholder="My Floor Plan" />
+                  </div>
+                  <div class="form-row-2col">
+                    <div class="form-field">
+                      <label class="form-label" for="paper-size">Paper Size</label>
+                      <select class="form-select" id="paper-size">
+                        <option value="a4">A4 (210 × 297 mm)</option>
+                        <option value="a3" selected>A3 (297 × 420 mm)</option>
+                        <option value="letter">Letter (8.5 × 11 in)</option>
+                        <option value="tabloid">Tabloid (11 × 17 in)</option>
+                      </select>
+                    </div>
+                    <div class="form-field">
+                      <label class="form-label" for="export-scale">Scale</label>
+                      <select class="form-select" id="export-scale">
+                        <option value="auto">Auto-fit</option>
+                        <option value="50">1:50</option>
+                        <option value="100">1:100</option>
+                        <option value="200">1:200</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="export-rooms-section">
+                  <h3>Room Schedule Summary</h3>
+                  <div id="export-rooms-summary"></div>
+                </div>
+              </div>
+
+              <div class="export-preview-col">
+                <div class="export-preview-header">
+                  <h3>Blueprint Sheet Preview</h3>
+                  <span class="preview-meta" id="export-preview-meta"></span>
+                </div>
+                <div class="export-preview" id="export-preview"></div>
+              </div>
             </div>
-            <div class="step-actions">
-              <button class="btn btn-secondary" id="btn-back-to-edit">Back to Editor</button>
-              <button class="btn btn-secondary btn-large" id="btn-save-plan-data" title="Rooms and walls as a data file, for importing into PaintingBusinessManager">
-                Save plan data
+
+            <div class="step-actions export-actions">
+              <button type="button" class="btn btn-secondary" id="btn-back-to-edit">Back to Editor</button>
+              <button type="button" class="btn btn-secondary" id="btn-save-plan-data" title="Rooms and walls as a data file, for importing into PaintingBusinessManager">
+                Save Plan Data
               </button>
-              <button class="btn btn-primary btn-large" id="btn-save-pdf">
-                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10 14l-5-5h3V3h4v6h3l-5 5zM3 16h14v2H3z"/></svg>
+              <button type="button" class="btn btn-primary" id="btn-save-pdf">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M10 14l-5-5h3V3h4v6h3l-5 5zM3 16h14v2H3z"/></svg>
                 Save PDF
               </button>
             </div>
@@ -230,19 +325,76 @@
 
     </main>
 
-    <!-- Error Modal -->
+    <!-- Command Palette Modal (Ctrl/Cmd+K) -->
+    <div class="modal-overlay" id="command-palette-modal" hidden>
+      <div class="modal modal-palette" role="dialog" aria-modal="true" aria-label="Command Palette">
+        <div class="palette-search-row">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18" aria-hidden="true">
+            <circle cx="9" cy="9" r="6" />
+            <path d="M13.5 13.5L17 17" />
+          </svg>
+          <input type="text" class="palette-input" id="command-palette-input" placeholder="Search pages, actions, tools, or recent scans..." autocomplete="off" />
+          <button type="button" class="btn btn-tool" id="btn-close-palette" aria-label="Close command palette">×</button>
+        </div>
+        <div class="palette-results" id="command-palette-results" role="listbox"></div>
+        <div class="palette-footer">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> Navigate</span>
+          <span><kbd>Enter</kbd> Select</span>
+          <span><kbd>Esc</kbd> Close</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Overlay ("?") -->
+    <div class="modal-overlay" id="shortcuts-modal" hidden>
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title" id="shortcuts-title">Keyboard Shortcuts</h3>
+            <p class="modal-subtitle">Shortcuts automatically pause whenever typing in text fields.</p>
+          </div>
+          <button type="button" class="btn btn-tool" id="btn-close-shortcuts" aria-label="Close keyboard shortcuts">×</button>
+        </div>
+        <div class="shortcuts-grid" id="shortcuts-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal" hidden>
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title" id="settings-title">Application Settings</h3>
+            <p class="modal-subtitle">Preferences are stored locally in your browser.</p>
+          </div>
+          <button type="button" class="btn btn-tool" id="btn-close-settings" aria-label="Close settings">×</button>
+        </div>
+        <div class="settings-modal-body" id="settings-modal-body"></div>
+        <div class="settings-modal-footer">
+          <span class="settings-diff-status" id="settings-diff-status">No unsaved changes</span>
+          <div class="settings-footer-buttons">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-reset-settings">Reset Defaults</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-settings">Cancel</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-save-settings" disabled>Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error / Status Modal -->
     <div class="modal-overlay" id="error-modal" hidden>
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="error-title">
         <div class="modal-icon error">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
         </div>
         <h3 class="modal-title" id="error-title">Error</h3>
         <p class="modal-message" id="error-message"></p>
-        <button class="btn btn-primary" id="btn-error-dismiss">OK</button>
+        <button type="button" class="btn btn-primary" id="btn-error-dismiss">OK</button>
       </div>
     </div>
 
-
+    <!-- Non-intrusive Toast Notification -->
+    <div class="app-toast" id="app-toast" role="status" aria-live="polite" hidden></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

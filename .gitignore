@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Root-level private scan files (keep public/samples/*.glb tracked)
+/*.glb

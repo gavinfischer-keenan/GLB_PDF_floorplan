@@ -1,93 +1,106 @@
 /**
  * Auto-detects which direction is 'up' in a loaded 3D model.
- * 
+ * Uses sqrt-free squared-threshold normal voting and bounding-box aspect ratio heuristics.
+ *
  * @param {Array} meshes - Array of meshes from GLBLoader.
  * @param {Object} bounds - Bounding box { min: { x, y, z }, max: { x, y, z } }.
- * @returns {Object} Result object with up axis, confidence, and counts.
+ * @returns {{ axis: string, confidence: number, counts: Object<string, number> }}
  */
 export function detectUpDirection(meshes, bounds) {
+  const counts = { '+x': 0, '-x': 0, '+y': 0, '-y': 0, '+z': 0, '-z': 0 };
   if (!meshes || meshes.length === 0) {
-    return { axis: '+y', confidence: 0, counts: { '+x': 0, '-x': 0, '+y': 0, '-y': 0, '+z': 0, '-z': 0 } };
+    return { axis: '+y', confidence: 0, counts };
   }
 
-  const counts = { '+x': 0, '-x': 0, '+y': 0, '-y': 0, '+z': 0, '-z': 0 };
-  const axes = [
-    { name: '+x', vec: [1, 0, 0] },
-    { name: '-x', vec: [-1, 0, 0] },
-    { name: '+y', vec: [0, 1, 0] },
-    { name: '-y', vec: [0, -1, 0] },
-    { name: '+z', vec: [0, 0, 1] },
-    { name: '-z', vec: [0, 0, -1] }
-  ];
+  // dot > 0.85 <=> (n_c)^2 > 0.7225 * |n|^2; since 0.7225 > 0.5, at most one axis can satisfy this per triangle.
+  const DOT_THRESHOLD_SQ = 0.85 * 0.85;
 
-  for (const mesh of meshes) {
-    const { positions, indices } = mesh;
+  for (let m = 0; m < meshes.length; m++) {
+    const { positions, indices } = meshes[m];
     if (!positions) continue;
 
-    const numTriangles = indices ? indices.length / 3 : positions.length / 9;
+    const numTriangles = indices ? Math.floor(indices.length / 3) : Math.floor(positions.length / 9);
     for (let i = 0; i < numTriangles; i++) {
-      let v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z;
-      
+      let i0, i1, i2;
       if (indices) {
-        const i0 = indices[i * 3] * 3;
-        const i1 = indices[i * 3 + 1] * 3;
-        const i2 = indices[i * 3 + 2] * 3;
-        
-        v0x = positions[i0]; v0y = positions[i0 + 1]; v0z = positions[i0 + 2];
-        v1x = positions[i1]; v1y = positions[i1 + 1]; v1z = positions[i1 + 2];
-        v2x = positions[i2]; v2y = positions[i2 + 1]; v2z = positions[i2 + 2];
+        const base = i * 3;
+        i0 = indices[base] * 3;
+        i1 = indices[base + 1] * 3;
+        i2 = indices[base + 2] * 3;
       } else {
-        const idx = i * 9;
-        v0x = positions[idx]; v0y = positions[idx + 1]; v0z = positions[idx + 2];
-        v1x = positions[idx + 3]; v1y = positions[idx + 4]; v1z = positions[idx + 5];
-        v2x = positions[idx + 6]; v2y = positions[idx + 7]; v2z = positions[idx + 8];
+        i0 = i * 9;
+        i1 = i0 + 3;
+        i2 = i0 + 6;
       }
 
-      // Edges
-      const e1x = v1x - v0x, e1y = v1y - v0y, e1z = v1z - v0z;
-      const e2x = v2x - v0x, e2y = v2y - v0y, e2z = v2z - v0z;
+      const v0x = positions[i0];
+      const v0y = positions[i0 + 1];
+      const v0z = positions[i0 + 2];
 
-      // Cross product
-      let nx = e1y * e2z - e1z * e2y;
-      let ny = e1z * e2x - e1x * e2z;
-      let nz = e1x * e2y - e1y * e2x;
+      const e1x = positions[i1] - v0x;
+      const e1y = positions[i1 + 1] - v0y;
+      const e1z = positions[i1 + 2] - v0z;
 
-      // Normalize
-      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-      if (len > 0) {
-        nx /= len; ny /= len; nz /= len;
-      }
+      const e2x = positions[i2] - v0x;
+      const e2y = positions[i2 + 1] - v0y;
+      const e2z = positions[i2 + 2] - v0z;
 
-      // Dot product with axes
-      for (const axis of axes) {
-        const dot = nx * axis.vec[0] + ny * axis.vec[1] + nz * axis.vec[2];
-        if (dot > 0.85) {
-          counts[axis.name]++;
-        }
+      const nx = e1y * e2z - e1z * e2y;
+      const ny = e1z * e2x - e1x * e2z;
+      const nz = e1x * e2y - e1y * e2x;
+
+      const lenSq = nx * nx + ny * ny + nz * nz;
+      if (lenSq === 0) continue;
+
+      const thresholdSq = DOT_THRESHOLD_SQ * lenSq;
+      if (nx * nx > thresholdSq) {
+        counts[nx > 0 ? '+x' : '-x']++;
+      } else if (ny * ny > thresholdSq) {
+        counts[ny > 0 ? '+y' : '-y']++;
+      } else if (nz * nz > thresholdSq) {
+        counts[nz > 0 ? '+z' : '-z']++;
       }
     }
   }
 
-  // Default preference for glTF standard (+y)
-  // Wall faces often point in +z/-z/+x/-x, causing naive face counts to misidentify walls as floors.
-  // We apply a strong preference multiplier to '+y'.
-  const yCount = counts['+y'] || 0;
-  
+  // Default preference for glTF standard (+y) to prevent vertical walls from outvoting horizontal floors.
+  const yCount = counts['+y'];
   let bestAxis = '+y';
-  let maxWeightedCount = yCount * 2.5; // Require 2.5x more faces for non-+y axes to override +y
+  let maxWeightedCount = yCount * 2.5;
 
-  for (const axis of axes) {
-    if (axis.name === '+y') continue;
-    const count = counts[axis.name];
+  const axisNames = ['+x', '-x', '+y', '-y', '+z', '-z'];
+  for (let i = 0; i < axisNames.length; i++) {
+    const axisName = axisNames[i];
+    if (axisName === '+y') continue;
+    const count = counts[axisName];
     if (count > maxWeightedCount) {
       maxWeightedCount = count;
-      bestAxis = axis.name;
+      bestAxis = axisName;
     }
   }
 
-  const totalVotes = Object.values(counts).reduce((a, b) => a + b, 0);
-  const rawMax = Math.max(...Object.values(counts));
-  const confidence = totalVotes > 0 ? rawMax / totalVotes : 0.8;
+  let totalVotes = 0;
+  let rawMax = 0;
+  for (let i = 0; i < axisNames.length; i++) {
+    const c = counts[axisNames[i]];
+    totalVotes += c;
+    if (c > rawMax) rawMax = c;
+  }
+
+  let confidence = totalVotes > 0 ? rawMax / totalVotes : 0.8;
+
+  // Aspect-ratio heuristic: buildings are typically shorter along their vertical axis than horizontally.
+  if (bounds && bounds.min && bounds.max) {
+    const sx = bounds.max.x - bounds.min.x;
+    const sy = bounds.max.y - bounds.min.y;
+    const sz = bounds.max.z - bounds.min.z;
+    const minSpan = Math.min(sx, sy, sz);
+    const axisChar = bestAxis[1];
+    const bestSpan = axisChar === 'x' ? sx : axisChar === 'y' ? sy : sz;
+    if (Math.max(sx, sy, sz) > 0 && bestSpan <= minSpan + 1e-6) {
+      confidence = Math.min(1, confidence + 0.2);
+    }
+  }
 
   return { axis: bestAxis, confidence, counts };
 }

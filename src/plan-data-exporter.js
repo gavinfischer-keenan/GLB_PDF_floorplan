@@ -31,13 +31,13 @@ function notePoint(note) {
  * @param {{name?: string, floorHeight?: number, ceilingHeight?: number}} opts.floor
  * @param {Array<[[number, number], [number, number]]>} opts.walls Edited wall segments
  * @param {Array<{pos: [number, number], text: string}>} [opts.textNotes] Text labels; a label inside a room names it
+ * @param {number} [opts.tolerance=0.05] Endpoint merge tolerance for room detection
  * @returns {Object}
  */
-export function buildPlanData({ projectName, floor, walls, textNotes = [] }) {
-  const rooms = detectRooms(walls || [], 0.05);
+export function buildPlanData({ projectName, floor, walls, textNotes = [], tolerance = 0.05 }) {
+  const rooms = detectRooms(walls || [], tolerance);
 
   const exportedRooms = rooms.map((room, i) => {
-    // A text label placed inside the room on the editor names it
     const label = textNotes.find((n) => {
       const p = notePoint(n);
       return p && n.text && n.text.trim() && pointInPolygon(p, room.polygon);
@@ -92,7 +92,6 @@ export async function savePlanData(data, fileName) {
       return { success: true, method: 'filesystem' };
     } catch (err) {
       if (err.name === 'AbortError') return { success: false };
-      // Fall through to a plain download
     }
   }
 

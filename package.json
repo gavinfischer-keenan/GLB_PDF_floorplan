@@ -1,6 +1,6 @@
 {
-  "name": "lively-babbage",
-  "version": "0.0.0",
+  "name": "bay-scallop-floorplan-extractor",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {

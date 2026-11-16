@@ -3,15 +3,52 @@
  * Uses jsPDF for traditional black/white architectural drawing output.
  */
 import { jsPDF } from 'jspdf';
-import { formatFeetInches } from './utils/geometry.js';
+import { formatDistance } from './utils/geometry.js';
 
 /** Paper sizes in mm */
-const PAPER_SIZES = {
+export const PAPER_SIZES = {
   a4: { width: 297, height: 210 },      // Landscape A4
   a3: { width: 420, height: 297 },      // Landscape A3
   letter: { width: 279.4, height: 215.9 }, // Landscape Letter
   tabloid: { width: 431.8, height: 279.4 }, // Landscape Tabloid
 };
+
+/**
+ * Compute layout scale denominator for a floor bounds on a given paper size.
+ * Shared between PDF export and live SVG blueprint preview.
+ */
+export function computeBlueprintScale(bounds, paper, margin, requestedScale = 'auto') {
+  const drawWidth = paper.width - margin.left - margin.right;
+  const drawHeight = paper.height - margin.top - margin.bottom;
+  const dataWidth = Math.max(0.1, bounds.maxX - bounds.minX);
+  const dataHeight = Math.max(0.1, bounds.maxY - bounds.minY);
+
+  let scale;
+  if (requestedScale === 'auto') {
+    const scaleX = drawWidth / (dataWidth * 1000);
+    const scaleY = drawHeight / (dataHeight * 1000);
+    const fitScale = Math.min(scaleX, scaleY) * 0.85;
+    const denom = 1 / fitScale;
+    const niceScales = [10, 20, 25, 50, 75, 100, 150, 200, 250, 500];
+    scale = niceScales.find((s) => s >= denom) || Math.ceil(denom / 50) * 50;
+  } else {
+    scale = Number(requestedScale) || 100;
+  }
+
+  return { scale, drawWidth, drawHeight, dataWidth, dataHeight };
+}
+
+/**
+ * Calculate a nice round length for the scale bar
+ * @param {number} scale - Scale denominator
+ * @returns {number} Length in meters
+ */
+export function niceScaleBarLength(scale) {
+  const targetMm = 50;
+  const metersForTarget = (targetMm * scale) / 1000;
+  const niceValues = [0.5, 1, 2, 3, 5, 10, 15, 20, 25, 50, 100];
+  return niceValues.find((v) => v >= metersForTarget * 0.6) || Math.ceil(metersForTarget);
+}
 
 /**
  * Export floor plan data to a professional architectural blueprint PDF
@@ -20,8 +57,9 @@ const PAPER_SIZES = {
  * @param {string} options.paperSize - 'a4' | 'a3' | 'letter' | 'tabloid'
  * @param {number|'auto'} options.scale - Scale denominator (e.g., 50 for 1:50) or 'auto'
  * @param {Array<Object>} options.floors - Array of floor data objects
+ * @param {'imperial'|'metric'} [options.units='imperial'] - Unit formatting
  * @param {string} [options.fileName] - Output filename
- * @returns {jsPDF} The generated PDF document
+ * @returns {{ doc: jsPDF, fileName: string }}
  */
 export function exportPDF(options) {
   const {
@@ -29,6 +67,7 @@ export function exportPDF(options) {
     paperSize = 'a3',
     scale: requestedScale = 'auto',
     floors = [],
+    units = 'imperial',
     fileName = 'floorplan.pdf',
   } = options;
 
@@ -40,48 +79,28 @@ export function exportPDF(options) {
     format: [paper.width, paper.height],
   });
 
-  // Margins
   const margin = { top: 20, right: 20, bottom: 35, left: 20 };
-  const drawWidth = paper.width - margin.left - margin.right;
-  const drawHeight = paper.height - margin.top - margin.bottom;
 
   for (let i = 0; i < floors.length; i++) {
     if (i > 0) doc.addPage([paper.width, paper.height], 'landscape');
 
     const floor = floors[i];
-    const { walls, rooms, bounds } = floor;
-
+    const { walls = [], bounds } = floor;
     if (!bounds) continue;
 
-    // Calculate scale
-    const dataWidth = bounds.maxX - bounds.minX;
-    const dataHeight = bounds.maxY - bounds.minY;
+    const { scale, drawWidth, drawHeight, dataWidth, dataHeight } = computeBlueprintScale(
+      bounds,
+      paper,
+      margin,
+      requestedScale
+    );
 
-    let scale;
-    if (requestedScale === 'auto') {
-      // Auto-fit: find scale that fits content in the drawing area
-      const scaleX = drawWidth / (dataWidth * 1000); // data is in meters, convert to mm
-      const scaleY = drawHeight / (dataHeight * 1000);
-      const fitScale = Math.min(scaleX, scaleY) * 0.85; // 85% of available space
-      // Round to a nice scale
-      const denom = 1 / fitScale;
-      const niceScales = [10, 20, 25, 50, 75, 100, 150, 200, 250, 500];
-      scale = niceScales.find((s) => s >= denom) || Math.ceil(denom / 50) * 50;
-    } else {
-      scale = requestedScale;
-    }
-
-    const mmPerMeter = 1000 / scale; // mm on paper per meter in reality
-
-    // Center the drawing
+    const mmPerMeter = 1000 / scale;
     const drawingWidth = dataWidth * mmPerMeter;
     const drawingHeight = dataHeight * mmPerMeter;
     const offsetX = margin.left + (drawWidth - drawingWidth) / 2;
     const offsetY = margin.top + (drawHeight - drawingHeight) / 2;
 
-    /**
-     * Convert model coordinates (meters) to page coordinates (mm)
-     */
     const toPage = (x, y) => ({
       x: offsetX + (x - bounds.minX) * mmPerMeter,
       y: offsetY + (y - bounds.minY) * mmPerMeter,
@@ -94,7 +113,7 @@ export function exportPDF(options) {
 
     // === Draw walls ===
     doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.6); // Thick lines for walls
+    doc.setLineWidth(0.6);
 
     for (const seg of walls) {
       const p1 = toPage(seg[0][0], seg[0][1]);
@@ -109,10 +128,8 @@ export function exportPDF(options) {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(80, 80, 80);
 
-    const totalW = dataWidth;
-    const totalH = dataHeight;
-    const dimOffset = 0.3; // meters offset from edges
-    const tickH = 1; // mm
+    const dimOffset = 0.3;
+    const tickH = 1;
 
     // Bottom dimension (total width)
     const wP1 = toPage(bounds.minX, bounds.maxY + dimOffset);
@@ -121,7 +138,7 @@ export function exportPDF(options) {
     doc.line(wP1.x, wP1.y - tickH, wP1.x, wP1.y + tickH);
     doc.line(wP2.x, wP2.y - tickH, wP2.x, wP2.y + tickH);
     const wMid = toPage((bounds.minX + bounds.maxX) / 2, bounds.maxY + dimOffset);
-    doc.text(formatFeetInches(totalW), wMid.x, wMid.y + 3, { align: 'center' });
+    doc.text(formatDistance(dataWidth, units), wMid.x, wMid.y + 3, { align: 'center' });
 
     // Right dimension (total height)
     const hP1 = toPage(bounds.maxX + dimOffset, bounds.minY);
@@ -130,7 +147,7 @@ export function exportPDF(options) {
     doc.line(hP1.x - tickH, hP1.y, hP1.x + tickH, hP1.y);
     doc.line(hP2.x - tickH, hP2.y, hP2.x + tickH, hP2.y);
     const hMid = toPage(bounds.maxX + dimOffset, (bounds.minY + bounds.maxY) / 2);
-    doc.text(formatFeetInches(totalH), hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
+    doc.text(formatDistance(dataHeight, units), hMid.x + 3, hMid.y, { align: 'center', angle: 90 });
 
     // === Custom user measurements ===
     if (floor.measurements && floor.measurements.length > 0) {
@@ -172,26 +189,21 @@ export function exportPDF(options) {
     doc.setLineWidth(0.4);
     doc.rect(tbX, tbY, tbWidth, tbHeight);
 
-    // Dividers
     doc.line(tbX + tbWidth * 0.5, tbY, tbX + tbWidth * 0.5, tbY + tbHeight);
     doc.line(tbX + tbWidth * 0.75, tbY, tbX + tbWidth * 0.75, tbY + tbHeight);
 
-    // Project name
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text(projectName, tbX + 5, tbY + 8);
 
-    // Floor name
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.text(floor.name || `Floor ${i + 1}`, tbX + 5, tbY + 14);
 
-    // Scale
     doc.setFontSize(9);
     doc.text(`Scale: 1:${scale}`, tbX + tbWidth * 0.5 + 5, tbY + 8);
 
-    // Date
     const dateStr = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -200,23 +212,21 @@ export function exportPDF(options) {
     doc.setFontSize(8);
     doc.text(dateStr, tbX + tbWidth * 0.5 + 5, tbY + 14);
 
-    // Generated by
     doc.setFontSize(7);
     doc.setTextColor(120, 120, 120);
-    doc.text('Generated by FloorPlan Extractor', tbX + tbWidth * 0.75 + 5, tbY + 8);
+    doc.text('Generated by Bay Scallop · FloorPlan Extractor', tbX + tbWidth * 0.75 + 5, tbY + 8);
     doc.text(`Page ${i + 1} of ${floors.length}`, tbX + tbWidth * 0.75 + 5, tbY + 14);
 
     // === Scale Bar ===
     const sbY = tbY - 8;
     const sbX = paper.width - margin.right - 60;
-    const scaleBarMeters = _niceScaleBarLength(scale);
+    const scaleBarMeters = niceScaleBarLength(scale);
     const scaleBarMm = scaleBarMeters * mmPerMeter;
 
     doc.setDrawColor(0);
     doc.setLineWidth(0.3);
     doc.setFillColor(0, 0, 0);
 
-    // Alternating black/white bar
     const segments = 4;
     const segWidth = scaleBarMm / segments;
     for (let s = 0; s < segments; s++) {
@@ -227,30 +237,16 @@ export function exportPDF(options) {
       }
     }
 
-    // Labels
-    const scaleBarFt = Math.round(scaleBarMeters * 3.28084);
+    const scaleLabel = units === 'metric'
+      ? `${scaleBarMeters} m`
+      : `${Math.round(scaleBarMeters * 3.28084)} ft`;
     doc.setFontSize(6);
     doc.setTextColor(0, 0, 0);
     doc.text('0', sbX, sbY - 1);
-    doc.text(`${scaleBarFt} ft`, sbX + scaleBarMm, sbY - 1, { align: 'right' });
+    doc.text(scaleLabel, sbX + scaleBarMm, sbY - 1, { align: 'right' });
   }
 
   return { doc, fileName };
-}
-
-/**
- * Calculate a nice round length for the scale bar
- * @param {number} scale - Scale denominator
- * @returns {number} Length in meters
- */
-function _niceScaleBarLength(scale) {
-  // We want the scale bar to be roughly 40-60mm on paper
-  const targetMm = 50;
-  const metersForTarget = (targetMm * scale) / 1000;
-
-  // Round to a nice number
-  const niceValues = [0.5, 1, 2, 3, 5, 10, 15, 20, 25, 50, 100];
-  return niceValues.find((v) => v >= metersForTarget * 0.6) || Math.ceil(metersForTarget);
 }
 
 /**
@@ -259,7 +255,6 @@ function _niceScaleBarLength(scale) {
  * @param {string} fileName - Suggested file name
  */
 export async function savePDF(doc, fileName) {
-  // Try File System Access API first (Chrome/Edge)
   if ('showSaveFilePicker' in window) {
     try {
       const handle = await window.showSaveFilePicker({
@@ -280,11 +275,9 @@ export async function savePDF(doc, fileName) {
       if (err.name === 'AbortError') {
         return { success: false, cancelled: true };
       }
-      // Fall through to download
     }
   }
 
-  // Fallback: direct download
   doc.save(fileName);
   return { success: true, method: 'download' };
 }
