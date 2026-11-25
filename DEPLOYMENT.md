@@ -26,6 +26,6 @@ The supplied Dockerfile provides a standalone root deployment. Docker is optiona
 
 ## Validation
 
-25 existing geometry, orientation, slicing, and export tests pass. The live built-in Sample Room flow was checked through orientation, editing, and PDF save confirmation. Production dependencies were audited with no reported vulnerabilities at deployment. Two moderate test-tool advisories remain; do not expose a Vitest development server publicly.
+All 63 unit and integration tests across 8 Vitest files (`tests/pipeline-e2e.test.js`, `tests/model-loader.test.js`, `tests/geometry.test.js`, `tests/detectors.test.js`, `tests/histogram.test.js`, `tests/plan-data-exporter.test.js`, `tests/vector-exporter.test.js`, and `tests/app-features.test.js`) pass, and `vite build` emits code-split chunks into `dist/` with no >500 kB chunk warnings.
 
 Check generated plans against the source model and real measurements before using them for construction. Automatic extraction depends on scan quality.

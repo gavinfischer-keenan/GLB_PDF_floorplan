@@ -1,8 +1,15 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { SUPPORTED_3D_EXTENSIONS, isSupported3DFile } from './utils/model-formats.js';
+
+export { SUPPORTED_3D_EXTENSIONS, isSupported3DFile };
 
 /**
- * Class to load GLB files and extract mesh geometry data in world space.
+ * Loads 3D scan/model files (.glb, .gltf, .obj, .stl, .ply) and extracts
+ * world-space triangle mesh geometry data.
  */
 export class GLBLoader {
   constructor() {
@@ -14,7 +21,7 @@ export class GLBLoader {
   }
 
   /**
-   * Loads a GLB file and extracts mesh data.
+   * Loads a supported 3D model File and extracts mesh data.
    * @param {File} file - The file to load.
    * @returns {Promise<Object>} An object containing scene and extracted mesh data.
    */
@@ -23,38 +30,158 @@ export class GLBLoader {
       throw new Error('Invalid input: Expected a File object.');
     }
 
-    const url = URL.createObjectURL(file);
-    const loader = new GLTFLoader();
+    const lower = file.name.toLowerCase();
 
-    try {
-      const gltf = await new Promise((resolve, reject) => {
-        loader.load(
-          url,
-          (loaded) => resolve(loaded),
-          (xhr) => {
-            if (this.onProgress && xhr.total > 0) {
-              const percent = (xhr.loaded / xhr.total) * 100;
-              this.onProgress(percent);
-            }
-          },
-          (error) => reject(new Error(`Failed to load GLB: ${error.message}`))
-        );
-      });
-
-      return this._processGLTF(gltf);
-    } finally {
-      URL.revokeObjectURL(url);
+    if (lower.endsWith('.glb') || lower.endsWith('.gltf')) {
+      const url = URL.createObjectURL(file);
+      const loader = new GLTFLoader();
+      try {
+        const gltf = await new Promise((resolve, reject) => {
+          loader.load(
+            url,
+            (loaded) => resolve(loaded),
+            (xhr) => {
+              if (this.onProgress && xhr.total > 0) {
+                const percent = (xhr.loaded / xhr.total) * 100;
+                this.onProgress(percent);
+              }
+            },
+            (error) => reject(new Error(`Failed to load GLB/GLTF: ${error.message}`))
+          );
+        });
+        return this._processScene(gltf.scene);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
     }
+
+    if (lower.endsWith('.obj')) {
+      this.onProgress?.(45);
+      const text = await file.text();
+      this.onProgress?.(85);
+      const result = this.parseOBJ(text);
+      this.onProgress?.(100);
+      return result;
+    }
+
+    if (lower.endsWith('.stl')) {
+      this.onProgress?.(45);
+      const buffer = await file.arrayBuffer();
+      this.onProgress?.(85);
+      const result = this.parseSTL(buffer);
+      this.onProgress?.(100);
+      return result;
+    }
+
+    if (lower.endsWith('.ply')) {
+      this.onProgress?.(45);
+      const buffer = await file.arrayBuffer();
+      this.onProgress?.(85);
+      const result = this.parsePLY(buffer);
+      this.onProgress?.(100);
+      return result;
+    }
+
+    throw new Error(`Unsupported 3D format. Supported extensions: ${SUPPORTED_3D_EXTENSIONS.join(', ')}`);
   }
 
   /**
-   * Processes the loaded GLTF scene to extract meshes and bounds.
-   * @param {Object} gltf - The loaded GLTF object.
-   * @returns {Object} Extracted data.
+   * Parses Wavefront .obj text into extracted mesh data.
+   * @param {string} text
+   * @returns {Object}
+   */
+  parseOBJ(text) {
+    const loader = new OBJLoader();
+    const group = loader.parse(text);
+    group.traverse((child) => {
+      if (child.isMesh && child.geometry && !child.geometry.attributes.normal) {
+        child.geometry.computeVertexNormals();
+      }
+    });
+    return this._processScene(group);
+  }
+
+  /**
+   * Parses binary or ASCII .stl ArrayBuffer into extracted mesh data.
+   * @param {ArrayBuffer | string} buffer
+   * @returns {Object}
+   */
+  parseSTL(buffer) {
+    const loader = new STLLoader();
+    const geometry = loader.parse(buffer);
+    if (!geometry.attributes.normal) {
+      geometry.computeVertexNormals();
+    }
+    const group = new THREE.Group();
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
+    mesh.name = 'STL Mesh';
+    group.add(mesh);
+    return this._processScene(group);
+  }
+
+  /**
+   * Parses binary or ASCII .ply ArrayBuffer into extracted mesh data.
+   * Rejects point-cloud-only PLY files that contain no triangle faces.
+   * @param {ArrayBuffer | string} buffer
+   * @returns {Object}
+   */
+  parsePLY(buffer) {
+    if (buffer instanceof ArrayBuffer) {
+      const headerSlice = new Uint8Array(buffer, 0, Math.min(2048, buffer.byteLength));
+      const headerText = new TextDecoder().decode(headerSlice);
+      if (headerText.startsWith('ply')) {
+        const faceMatch = headerText.match(/element\s+face\s+(\d+)/i);
+        const faceCount = faceMatch ? parseInt(faceMatch[1], 10) : 0;
+        if (!faceMatch || faceCount === 0) {
+          throw new Error(
+            'This PLY file appears to be a point cloud without triangle faces. Export a meshed .ply, .obj, or .glb model to extract floor plans.'
+          );
+        }
+      }
+    } else if (typeof buffer === 'string') {
+      const faceMatch = buffer.slice(0, 2048).match(/element\s+face\s+(\d+)/i);
+      const faceCount = faceMatch ? parseInt(faceMatch[1], 10) : 0;
+      if (!faceMatch || faceCount === 0) {
+        throw new Error(
+          'This PLY file appears to be a point cloud without triangle faces. Export a meshed .ply, .obj, or .glb model to extract floor plans.'
+        );
+      }
+    }
+
+    const loader = new PLYLoader();
+    const geometry = loader.parse(buffer);
+    if (!geometry.index && (!geometry.attributes.position || geometry.attributes.position.count < 3)) {
+      throw new Error(
+        'This PLY file appears to be a point cloud without triangle faces. Export a meshed .ply, .obj, or .glb model to extract floor plans.'
+      );
+    }
+    if (!geometry.attributes.normal) {
+      geometry.computeVertexNormals();
+    }
+    const group = new THREE.Group();
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
+    mesh.name = 'PLY Mesh';
+    group.add(mesh);
+    return this._processScene(group);
+  }
+
+  /**
+   * Backward-compatible wrapper around _processScene.
+   * @param {Object} gltf
+   * @returns {Object}
    * @private
    */
   _processGLTF(gltf) {
-    const scene = gltf.scene;
+    return this._processScene(gltf.scene);
+  }
+
+  /**
+   * Processes a Three.js scene/group to extract meshes and world bounds.
+   * @param {THREE.Object3D} scene - The loaded scene or group.
+   * @returns {Object} Extracted data.
+   * @private
+   */
+  _processScene(scene) {
     scene.updateMatrixWorld(true);
 
     const meshes = [];
@@ -174,3 +301,5 @@ export class GLBLoader {
     };
   }
 }
+
+export const ModelLoader = GLBLoader;

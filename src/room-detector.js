@@ -1,4 +1,4 @@
-import { polygonAreaAndCentroid, distancePointToPoint, segmentsToPolygons } from './utils/geometry.js';
+import { polygonAreaAndCentroid, distancePointToPoint, segmentsToPolygons, pointInPolygon } from './utils/geometry.js';
 
 /**
  * Classifies a room by area in square meters.
@@ -15,6 +15,8 @@ function classifyRoom(area) {
 
 /**
  * Detects closed loops (rooms) from a collection of 2D line segments.
+ * Discards only outer-shell polygons that strictly enclose other rooms,
+ * so standalone single rooms and adjacent shared-wall rooms are both preserved.
  *
  * @param {Array<[[number, number], [number, number]]>} segments - 2D line segments from cross-section extraction.
  * @param {number | { tolerance?: number, minArea?: number, maxArea?: number }} [toleranceOrOptions=0.05]
@@ -42,32 +44,32 @@ export function detectRooms(segments, toleranceOrOptions = 0.05) {
     return [];
   }
 
-  // Single-pass computation of area + centroid and largest outer-boundary identification
+  // Compute area + centroid for all extracted faces
   const metrics = new Array(polygons.length);
-  let largestArea = -1;
-  let largestPolygonIndex = -1;
-
   for (let i = 0; i < polygons.length; i++) {
     const polygon = polygons[i];
     const { area: signedArea, centroid } = polygonAreaAndCentroid(polygon);
-    const area = Math.abs(signedArea);
-    metrics[i] = { polygon, area, centroid };
-
-    if (area > largestArea) {
-      largestArea = area;
-      largestPolygonIndex = i;
-    }
+    metrics[i] = { polygon, area: Math.abs(signedArea), centroid };
   }
 
   const detectedRooms = [];
   let roomId = 1;
 
   for (let i = 0; i < metrics.length; i++) {
-    // Discard the largest polygon (outer shell boundary) and out-of-range areas
-    if (i === largestPolygonIndex) continue;
-
     const { polygon, area, centroid } = metrics[i];
     if (area < minArea || area > maxArea) continue;
+
+    // Discard polygon i only if it strictly encloses at least one smaller valid room
+    let isOuterShell = false;
+    for (let j = 0; j < metrics.length; j++) {
+      if (i === j) continue;
+      const other = metrics[j];
+      if (other.area >= minArea && other.area < area * 0.99 && pointInPolygon(other.centroid, polygon)) {
+        isOuterShell = true;
+        break;
+      }
+    }
+    if (isOuterShell) continue;
 
     let perimeter = 0;
     let minX = Infinity, minY = Infinity;

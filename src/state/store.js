@@ -35,16 +35,21 @@ function normalizeSettings(raw = {}) {
     units: merged.units === 'metric' ? 'metric' : 'imperial',
     snapAngle: [0, 45, 90].includes(Number(merged.snapAngle)) ? Number(merged.snapAngle) : DEFAULT_SETTINGS.snapAngle,
     showGrid: typeof merged.showGrid === 'boolean' ? merged.showGrid : DEFAULT_SETTINGS.showGrid,
+    showRooms: typeof merged.showRooms === 'boolean' ? merged.showRooms : DEFAULT_SETTINGS.showRooms,
+    snapToGeometry: typeof merged.snapToGeometry === 'boolean' ? merged.snapToGeometry : DEFAULT_SETTINGS.snapToGeometry,
     defaultSliceOffset: [0.6, 1.0, 1.4, 1.8].includes(Number(merged.defaultSliceOffset))
       ? Number(merged.defaultSliceOffset)
       : DEFAULT_SETTINGS.defaultSliceOffset,
     roomMergeTolerance: [0.02, 0.05, 0.1].includes(Number(merged.roomMergeTolerance))
       ? Number(merged.roomMergeTolerance)
       : DEFAULT_SETTINGS.roomMergeTolerance,
+    wallSimplification: [0, 0.01, 0.02, 0.05].includes(Number(merged.wallSimplification))
+      ? Number(merged.wallSimplification)
+      : DEFAULT_SETTINGS.wallSimplification,
     defaultPaperSize: ['a4', 'a3', 'letter', 'tabloid'].includes(merged.defaultPaperSize)
       ? merged.defaultPaperSize
       : DEFAULT_SETTINGS.defaultPaperSize,
-    defaultScale: ['auto', '50', '100', '200'].includes(String(merged.defaultScale))
+    defaultScale: ['auto', '24', '48', '96', '50', '100', '200'].includes(String(merged.defaultScale))
       ? String(merged.defaultScale)
       : DEFAULT_SETTINGS.defaultScale,
   };
@@ -168,8 +173,11 @@ export function addRecentItem(item, storage = getDefaultStorage()) {
     totalTriangles: item.totalTriangles || 0,
     wallCount: item.wallCount || 0,
     roomCount: item.roomCount || 0,
+    floorCount: item.floorCount || (Array.isArray(item.floorsSnapshot) ? item.floorsSnapshot.length : 1),
     timestamp: item.timestamp || new Date().toISOString(),
+    metadata: item.metadata || null,
     floorPlanSnapshot: item.floorPlanSnapshot || null,
+    floorsSnapshot: item.floorsSnapshot || null,
   };
 
   const filtered = current.filter(
@@ -183,7 +191,9 @@ export function addRecentItem(item, storage = getDefaultStorage()) {
     } catch {
       // Retry without snapshot payloads if localStorage quota is tight
       try {
-        const lightweight = updated.map((u, idx) => (idx === 0 ? u : { ...u, floorPlanSnapshot: null }));
+        const lightweight = updated.map((u, idx) =>
+          idx === 0 ? u : { ...u, floorPlanSnapshot: null, floorsSnapshot: null }
+        );
         storage.setItem(RECENT_STORAGE_KEY, JSON.stringify(lightweight));
       } catch {
         // Ignore if storage is completely unavailable

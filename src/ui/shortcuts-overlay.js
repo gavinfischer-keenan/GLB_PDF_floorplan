@@ -95,13 +95,50 @@ export function renderShortcutsModalBody(listContainer) {
   }
 }
 
+const GUIDE_SECTIONS = [
+  {
+    title: '1. Load a 3D Scan or Saved Plan',
+    body: 'Drop a .glb, .gltf, .obj, .stl, or meshed .ply 3D scan to extract floor plans automatically, try a built-in sample, or re-import an exported .json plan file to continue editing across devices.',
+  },
+  {
+    title: '2. Confirm Orientation & Multi-Floor Planes',
+    body: 'Verify the green Up arrow in the 3D viewport and inspect the translucent detected floor slice planes. Override any of the 6 axes (±X, ±Y, ±Z) before extracting.',
+  },
+  {
+    title: '3. Precision CAD Editing, Layers & Scale',
+    body: 'Draw continuous wall chains (D; right-click or Esc to finish) with magnetic snapping (Alt to bypass). Select a wall to drag its endpoint handles or type an exact length in the bottom Properties Bar. Auto-sliced Scan Walls stay separate from Drafted Walls (toggle via Layers ▾), so Slice Offset scrubbing never erases hand-drawn walls. Use Doors (Shift+D), Windows (W), Archways (A), Stairs (S), Auto-Straighten (Shift+R), and Calibrate Scale (C).',
+  },
+  {
+    title: '4. Client-Ready Multi-Format Export',
+    body: 'Choose Landscape or Portrait sheets, US Imperial (1/4" = 1\'-0") or Metric scales, North arrow angle, Room Schedule table, and custom Title Block metadata. Export as Vector PDF, High-DPI PNG, Layered SVG, AutoCAD R12 DXF, or JSON.',
+  },
+];
+
+export function renderHelpGuideBody(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  for (const sec of GUIDE_SECTIONS) {
+    const card = document.createElement('div');
+    card.className = 'help-guide-card';
+    const h4 = document.createElement('h4');
+    h4.textContent = sec.title;
+    const p = document.createElement('p');
+    p.textContent = sec.body;
+    card.append(h4, p);
+    container.appendChild(card);
+  }
+}
+
 /**
- * Initialize global keyboard shortcuts and the "?" shortcuts overlay.
+ * Initialize global keyboard shortcuts and the "?" help/shortcuts overlay.
  * @param {Object} opts
  */
 export function initShortcutsOverlay({
   modalEl,
   bodyEl,
+  guideBodyEl,
+  tabShortcutsEl,
+  tabGuideEl,
   closeBtnEl,
   openBtnEl,
   isAnyOtherModalOpen,
@@ -109,9 +146,24 @@ export function initShortcutsOverlay({
   handlers,
 }) {
   renderShortcutsModalBody(bodyEl);
+  renderHelpGuideBody(guideBodyEl);
 
-  const open = () => {
+  const setActiveTab = (tab) => {
+    const showGuide = tab === 'guide';
+    if (bodyEl) bodyEl.hidden = showGuide;
+    if (guideBodyEl) guideBodyEl.hidden = !showGuide;
+    tabShortcutsEl?.classList.toggle('active', !showGuide);
+    tabShortcutsEl?.setAttribute('aria-selected', String(!showGuide));
+    tabGuideEl?.classList.toggle('active', showGuide);
+    tabGuideEl?.setAttribute('aria-selected', String(showGuide));
+  };
+
+  tabShortcutsEl?.addEventListener('click', () => setActiveTab('shortcuts'));
+  tabGuideEl?.addEventListener('click', () => setActiveTab('guide'));
+
+  const open = (tab = 'shortcuts') => {
     if (!modalEl) return;
+    setActiveTab(tab);
     modalEl.hidden = false;
     closeBtnEl?.focus();
   };
@@ -127,7 +179,7 @@ export function initShortcutsOverlay({
     else close();
   };
 
-  openBtnEl?.addEventListener('click', open);
+  openBtnEl?.addEventListener('click', () => open('shortcuts'));
   closeBtnEl?.addEventListener('click', close);
   modalEl?.addEventListener('click', (e) => {
     if (e.target === modalEl) close();
@@ -225,15 +277,36 @@ export function initShortcutsOverlay({
         break;
       case 'd':
         e.preventDefault();
-        handlers.selectTool?.('draw');
+        handlers.selectTool?.(e.shiftKey ? 'door' : 'draw');
+        break;
+      case 'w':
+        e.preventDefault();
+        handlers.selectTool?.('window');
+        break;
+      case 'a':
+        e.preventDefault();
+        handlers.selectTool?.('archway');
+        break;
+      case 's':
+        e.preventDefault();
+        handlers.selectTool?.('stairs');
         break;
       case 'm':
         e.preventDefault();
         handlers.selectTool?.('measure');
         break;
+      case 'c':
+        e.preventDefault();
+        handlers.selectTool?.('calibrate');
+        break;
       case 'e':
         e.preventDefault();
         handlers.selectTool?.('erase');
+        break;
+      case 'r':
+        e.preventDefault();
+        if (e.shiftKey) handlers.autoStraighten?.();
+        else handlers.rotate90?.();
         break;
       case 'f':
         e.preventDefault();

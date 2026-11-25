@@ -63,7 +63,7 @@
           </svg>
           <span class="header-btn-text">Settings</span>
         </button>
-        <button type="button" class="btn btn-secondary btn-sm btn-icon-only" id="btn-shortcuts-help" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts">
+        <button type="button" class="btn btn-secondary btn-sm btn-icon-only" id="btn-shortcuts-help" title="Help &amp; Keyboard Shortcuts (?)" aria-label="Help and Keyboard Shortcuts">
           ?
         </button>
       </div>
@@ -76,16 +76,16 @@
       <section class="wizard-step active" id="step-load">
         <div class="step-content centered">
           <div class="load-layout">
-            <div class="upload-zone" id="upload-zone" tabindex="0" role="button" aria-label="Upload a GLB 3D scan file">
+            <div class="upload-zone" id="upload-zone" tabindex="0" role="button" aria-label="Upload a GLB 3D scan or JSON plan file">
               <svg class="upload-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M24 32V12M16 20l8-8 8 8M8 36h32"/>
                 <rect x="4" y="4" width="40" height="40" rx="4"/>
               </svg>
-              <h2>Load 3D Scan</h2>
-              <p class="upload-hint">Drag &amp; drop a <strong>.glb</strong> file here, or click to browse</p>
-              <input type="file" id="file-input" accept=".glb" hidden />
+              <h2>Load 3D Scan or Plan</h2>
+              <p class="upload-hint">Drag &amp; drop a <strong>.glb, .gltf, .obj, .stl, .ply</strong> 3D scan or <strong>.json</strong> plan file here, or click to browse</p>
+              <input type="file" id="file-input" accept=".glb,.gltf,.obj,.stl,.ply,.json" hidden />
               <button type="button" class="btn btn-primary" id="btn-browse">
-                <span>Choose GLB File</span>
+                <span>Choose 3D Scan / JSON File</span>
               </button>
               <div class="sample-models">
                 <span class="sample-models-label">Or test with an instant sample scan:</span>
@@ -150,6 +150,10 @@
                   <span class="badge-value" id="detected-confidence">—</span>
                 </div>
               </div>
+              <label class="checkbox-inline orient-planes-toggle">
+                <input type="checkbox" id="toggle-3d-planes" checked />
+                <span>Show detected floor slice planes in 3D</span>
+              </label>
             </div>
             <div class="model-stats" id="model-stats">
               <h3>Model Info</h3>
@@ -157,6 +161,7 @@
                 <div class="stat"><span class="stat-label">Triangles</span><span class="stat-value" id="stat-triangles">—</span></div>
                 <div class="stat"><span class="stat-label">Meshes</span><span class="stat-value" id="stat-meshes">—</span></div>
                 <div class="stat"><span class="stat-label">Bounds</span><span class="stat-value" id="stat-bounds">—</span></div>
+                <div class="stat"><span class="stat-label">Detected Floors</span><span class="stat-value" id="stat-floors">—</span></div>
               </div>
             </div>
             <div class="step-actions">
@@ -173,22 +178,37 @@
         <div class="step-content full-editor">
           <div class="editor-toolbar" id="editor-toolbar">
             <div class="toolbar-group" role="group" aria-label="Drawing tools">
-              <button type="button" class="btn btn-tool active" data-tool="select" title="Select (V)" aria-label="Select tool">
+              <button type="button" class="btn btn-tool active" data-tool="select" title="Select / Marquee Box (V)" aria-label="Select tool">
                 <svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 2l12 8.5L10 12l-2 6z"/></svg>
               </button>
-              <button type="button" class="btn btn-tool" data-tool="pan" title="Pan / Move Map (H)" aria-label="Pan tool">
+              <button type="button" class="btn btn-tool" data-tool="pan" title="Pan / Move Map (H or Space+Drag)" aria-label="Pan tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 11V5a1 1 0 012 0v5M9 10V3a1 1 0 012 0v7M11 10V4a1 1 0 012 0v6M13 11V6a1 1 0 012 0v7a5 5 0 01-5 5h-1a5 5 0 01-5-5v-3a1 1 0 012 0v2"/></svg>
-              </button>
-              <button type="button" class="btn btn-tool" data-tool="text" title="Add Text Note (T)" aria-label="Add text note tool">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12M10 4v12M7 16h6"/></svg>
               </button>
               <button type="button" class="btn btn-tool" data-tool="draw" title="Draw Wall (D)" aria-label="Draw wall tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17L17 3M14 3h3v3"/></svg>
               </button>
+              <button type="button" class="btn btn-tool" data-tool="door" title="Place Door Symbol (Shift+D)" aria-label="Place door symbol">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16V4M4 4a12 12 0 0112 12H4"/></svg>
+              </button>
+              <button type="button" class="btn btn-tool" data-tool="window" title="Place Window Symbol (W)" aria-label="Place window symbol">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="14" height="6" rx="0.5"/><path d="M3 10h14"/></svg>
+              </button>
+              <button type="button" class="btn btn-tool" data-tool="archway" title="Place Archway / Opening (A)" aria-label="Place archway symbol">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v6M17 7v6M5 10h10" stroke-dasharray="2 2"/><path d="M3 7v6M17 7v6"/></svg>
+              </button>
+              <button type="button" class="btn btn-tool" data-tool="stairs" title="Place Stairs (S)" aria-label="Place stairs symbol">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="12" height="14" rx="0.5"/><path d="M4 6.5h12M4 10h12M4 13.5h12M10 15V5M7.5 7.5L10 5l2.5 2.5"/></svg>
+              </button>
               <button type="button" class="btn btn-tool" data-tool="measure" title="Measure (M)" aria-label="Measure tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 18L18 2M5 18v-3M8 18v-2M11 18v-3M14 18v-2"/></svg>
               </button>
-              <button type="button" class="btn btn-tool" data-tool="erase" title="Erase / Delete (E)" aria-label="Erase tool">
+              <button type="button" class="btn btn-tool" data-tool="calibrate" title="Calibrate Scale (C)" aria-label="Calibrate scale tool">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 14h14M3 11v6M17 11v6M7 14v-2M10 14v-3M13 14v-2"/><path d="M6 6l4-3 4 3"/></svg>
+              </button>
+              <button type="button" class="btn btn-tool" data-tool="text" title="Add Text Note (T)" aria-label="Add text note tool">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h12M10 4v12M7 16h6"/></svg>
+              </button>
+              <button type="button" class="btn btn-tool" data-tool="erase" title="Erase / Marquee Erase (E)" aria-label="Erase tool">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 14l8-8M6 6l8 8"/></svg>
               </button>
             </div>
@@ -203,14 +223,38 @@
             </div>
             <div class="toolbar-divider" aria-hidden="true"></div>
             <div class="toolbar-group toolbar-slice-group">
-              <label class="toolbar-label" for="slice-height-slider">Slice Height</label>
-              <input type="range" class="slider" id="slice-height-slider" min="0" max="100" value="50" />
+              <label class="toolbar-label" for="slice-height-slider">Slice Offset</label>
+              <input type="range" class="slider" id="slice-height-slider" min="10" max="300" value="100" />
               <span class="toolbar-value" id="slice-height-value">3' 3"</span>
             </div>
             <div class="toolbar-spacer"></div>
             <div class="toolbar-group">
+              <div class="layers-menu-wrap">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-layers" aria-expanded="false" aria-haspopup="true" title="Toggle canvas layers">
+                  Layers ▾
+                </button>
+                <div class="layers-popover" id="layers-popover" hidden>
+                  <div class="layers-popover-title">Visible Layers</div>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="scan" checked /> <span>3D Scan Walls (<span id="layer-count-scan">0</span>)</span></label>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="drafted" checked /> <span>Drafted Walls (<span id="layer-count-drafted">0</span>)</span></label>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="rooms" checked /> <span>Room Overlays</span></label>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="symbols" checked /> <span>Doors &amp; Windows</span></label>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="measurements" checked /> <span>Measurements</span></label>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="notes" checked /> <span>Text Notes</span></label>
+                  <label class="checkbox-inline"><input type="checkbox" data-layer-toggle="grid" checked /> <span>Reference Grid</span></label>
+                </div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-auto-straighten" title="Align dominant walls to horizontal/vertical axes (Shift+R)">
+                Auto-Straighten
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-rotate-90" title="Rotate active floor 90° clockwise (R)">
+                Rotate 90°
+              </button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-insert-room" title="Insert a 4m × 3m closed room template">
-                + Room Template
+                + Room
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-canvas" title="Clear active floor canvas (undoable)">
+                Clear
               </button>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-rooms" aria-expanded="true">
                 Rooms (0)
@@ -218,9 +262,15 @@
             </div>
           </div>
 
+          <div class="floor-tabs-bar" id="floor-tabs-bar">
+            <div class="floor-tabs-list" id="floor-tabs-list" role="tablist" aria-label="Building floors"></div>
+            <button type="button" class="btn btn-secondary btn-xs" id="btn-add-floor" title="Add another floor level">+ Add Floor</button>
+          </div>
+
           <div class="editor-workspace">
             <div class="editor-canvas" id="editor-canvas">
               <svg id="floor-plan-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+              <div class="editor-properties-bar" id="editor-properties-bar" hidden></div>
               <div class="editor-empty-overlay" id="editor-empty-state" hidden></div>
             </div>
 
@@ -283,15 +333,56 @@
                       </select>
                     </div>
                     <div class="form-field">
-                      <label class="form-label" for="export-scale">Scale</label>
-                      <select class="form-select" id="export-scale">
-                        <option value="auto">Auto-fit</option>
-                        <option value="50">1:50</option>
-                        <option value="100">1:100</option>
-                        <option value="200">1:200</option>
+                      <label class="form-label" for="paper-orientation">Orientation</label>
+                      <select class="form-select" id="paper-orientation">
+                        <option value="landscape" selected>Landscape</option>
+                        <option value="portrait">Portrait</option>
                       </select>
                     </div>
                   </div>
+                  <div class="form-row-2col">
+                    <div class="form-field">
+                      <label class="form-label" for="export-scale">Scale</label>
+                      <select class="form-select" id="export-scale">
+                        <option value="auto">Auto-fit</option>
+                        <option value="24">1/2" = 1'-0" (1:24)</option>
+                        <option value="48">1/4" = 1'-0" (1:48)</option>
+                        <option value="96">1/8" = 1'-0" (1:96)</option>
+                        <option value="50">1:50 (Metric)</option>
+                        <option value="100">1:100 (Metric)</option>
+                        <option value="200">1:200 (Metric)</option>
+                      </select>
+                    </div>
+                    <div class="form-field">
+                      <label class="form-label" for="export-north-angle">North Arrow (°)</label>
+                      <div class="north-row">
+                        <label class="checkbox-inline" title="Show North Arrow on blueprint">
+                          <input type="checkbox" id="export-show-north" checked />
+                          <span>Show</span>
+                        </label>
+                        <input type="number" class="form-input" id="export-north-angle" value="0" min="0" max="359" step="5" />
+                      </div>
+                    </div>
+                  </div>
+                  <label class="checkbox-inline">
+                    <input type="checkbox" id="export-show-rooms" checked />
+                    <span>Show room fills, labels &amp; areas on blueprint</span>
+                  </label>
+                  <label class="checkbox-inline">
+                    <input type="checkbox" id="export-room-schedule" checked />
+                    <span>Include Room Schedule table on PDF / preview sheet</span>
+                  </label>
+                  <details class="title-block-details">
+                    <summary>Title Block Details (Client, Address, Author, Sheet #)</summary>
+                    <div class="title-block-fields">
+                      <div class="form-row-2col">
+                        <input type="text" class="form-input" id="meta-client" placeholder="Client Name" />
+                        <input type="text" class="form-input" id="meta-sheet" placeholder="Sheet # (e.g. A-101)" />
+                      </div>
+                      <input type="text" class="form-input" id="meta-address" placeholder="Property Address" />
+                      <input type="text" class="form-input" id="meta-author" placeholder="Drawn By / Company" />
+                    </div>
+                  </details>
                 </div>
 
                 <div class="export-rooms-section">
@@ -303,7 +394,14 @@
               <div class="export-preview-col">
                 <div class="export-preview-header">
                   <h3>Blueprint Sheet Preview</h3>
-                  <span class="preview-meta" id="export-preview-meta"></span>
+                  <div class="export-preview-controls">
+                    <div class="export-page-nav" id="export-page-nav" hidden>
+                      <button type="button" class="btn btn-secondary btn-xs" id="export-page-prev" aria-label="Previous floor sheet">‹</button>
+                      <span id="export-page-label">Floor 1 (1/1)</span>
+                      <button type="button" class="btn btn-secondary btn-xs" id="export-page-next" aria-label="Next floor sheet">›</button>
+                    </div>
+                    <span class="preview-meta" id="export-preview-meta"></span>
+                  </div>
                 </div>
                 <div class="export-preview" id="export-preview"></div>
               </div>
@@ -311,8 +409,17 @@
 
             <div class="step-actions export-actions">
               <button type="button" class="btn btn-secondary" id="btn-back-to-edit">Back to Editor</button>
-              <button type="button" class="btn btn-secondary" id="btn-save-plan-data" title="Rooms and walls as a data file, for importing into PaintingBusinessManager">
+              <button type="button" class="btn btn-secondary" id="btn-save-plan-data" title="Rooms, walls, and annotations as JSON for re-import or PaintingBusinessManager">
                 Save Plan Data
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-save-svg" title="Export clean layered vector SVG">
+                Save SVG
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-save-png" title="Export high-DPI blueprint PNG image">
+                Save PNG
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-save-dxf" title="Export AutoCAD R12 DXF for CAD software">
+                Save DXF
               </button>
               <button type="button" class="btn btn-primary" id="btn-save-pdf">
                 <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M10 14l-5-5h3V3h4v6h3l-5 5zM3 16h14v2H3z"/></svg>
@@ -345,17 +452,90 @@
       </div>
     </div>
 
-    <!-- Keyboard Shortcuts Overlay ("?") -->
+    <!-- Help & Keyboard Shortcuts Overlay ("?") -->
     <div class="modal-overlay" id="shortcuts-modal" hidden>
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
         <div class="modal-header">
           <div>
-            <h3 class="modal-title" id="shortcuts-title">Keyboard Shortcuts</h3>
+            <h3 class="modal-title" id="shortcuts-title">Help &amp; Keyboard Shortcuts</h3>
             <p class="modal-subtitle">Shortcuts automatically pause whenever typing in text fields.</p>
           </div>
-          <button type="button" class="btn btn-tool" id="btn-close-shortcuts" aria-label="Close keyboard shortcuts">×</button>
+          <button type="button" class="btn btn-tool" id="btn-close-shortcuts" aria-label="Close help overlay">×</button>
+        </div>
+        <div class="help-tabs" role="tablist">
+          <button type="button" class="help-tab active" id="help-tab-shortcuts" role="tab" aria-selected="true">Keyboard Shortcuts</button>
+          <button type="button" class="help-tab" id="help-tab-guide" role="tab" aria-selected="false">Quick Guide</button>
         </div>
         <div class="shortcuts-grid" id="shortcuts-modal-body"></div>
+        <div class="help-guide-body" id="help-guide-body" hidden></div>
+      </div>
+    </div>
+
+    <!-- Floor Properties Modal (Rename / Ceiling Height) -->
+    <div class="modal-overlay" id="floor-edit-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="floor-edit-title">
+        <div class="modal-header" style="width: 100%;">
+          <div>
+            <h3 class="modal-title" id="floor-edit-title">Floor Properties</h3>
+            <p class="modal-subtitle">Rename this level or adjust its ceiling height.</p>
+          </div>
+          <button type="button" class="btn btn-tool" id="btn-close-floor-edit" aria-label="Close floor properties">×</button>
+        </div>
+        <div class="calibrate-form">
+          <div class="form-field">
+            <label class="form-label" for="floor-edit-name">Floor Name</label>
+            <input type="text" class="form-input" id="floor-edit-name" placeholder="e.g. Ground Floor" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="floor-edit-ceiling">Ceiling Height (<span id="floor-edit-ceiling-unit">ft</span>)</label>
+            <input type="number" step="0.1" min="1.5" class="form-input" id="floor-edit-ceiling" />
+          </div>
+        </div>
+        <div class="settings-footer-buttons" style="width: 100%; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-floor-edit">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-save-floor-edit">Save Floor</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scale Calibration Modal -->
+    <div class="modal-overlay" id="calibrate-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="calibrate-title">
+        <div class="modal-header" style="width: 100%;">
+          <div>
+            <h3 class="modal-title" id="calibrate-title">Calibrate Plan Scale</h3>
+            <p class="modal-subtitle">Measured span: <strong id="calibrate-measured-val">—</strong></p>
+          </div>
+          <button type="button" class="btn btn-tool" id="btn-close-calibrate" aria-label="Close calibration">×</button>
+        </div>
+        <div class="calibrate-form">
+          <div class="form-row-2col">
+            <div class="form-field">
+              <label class="form-label" for="calibrate-actual-input">Actual Length</label>
+              <input type="number" step="any" min="0.01" class="form-input" id="calibrate-actual-input" placeholder="e.g. 12.5" />
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="calibrate-unit-select">Unit</label>
+              <select class="form-select" id="calibrate-unit-select">
+                <option value="ft">Feet (ft)</option>
+                <option value="in">Inches (in)</option>
+                <option value="m">Meters (m)</option>
+                <option value="cm">Centimeters (cm)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-field" id="calibrate-scope-field" hidden>
+            <label class="form-label" for="calibrate-scope-select">Apply To</label>
+            <select class="form-select" id="calibrate-scope-select">
+              <option value="all">All floors (recommended)</option>
+              <option value="active">Active floor only</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-footer-buttons" style="width: 100%; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-calibrate">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-apply-calibrate">Apply Scale</button>
+        </div>
       </div>
     </div>
 

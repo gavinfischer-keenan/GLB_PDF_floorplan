@@ -16,6 +16,7 @@ export class Viewport3D {
     this.upArrow = null;
     this.slicePlane = null;
     this.floorPlanes = [];
+    this.floorPlanesVisible = true;
 
     // Shared neutral material reused across models to avoid per-mesh allocations
     this._overrideMaterial = new THREE.MeshStandardMaterial({
@@ -151,11 +152,12 @@ export class Viewport3D {
   }
 
   /**
-   * Show horizontal planes at detected floor levels
+   * Show horizontal planes at detected floor slice levels, sized and centered to model bounds.
    * @param {Array<{floorHeight: number, sliceHeight: number, name: string}>} floors
    * @param {string} upAxis
+   * @param {{min: {x,y,z}, max: {x,y,z}} | null} [bounds=null]
    */
-  showFloorPlanes(floors, upAxis) {
+  showFloorPlanes(floors, upAxis, bounds = null) {
     this.floorPlanes.forEach((p) => {
       this.scene.remove(p);
       this._disposeObject(p);
@@ -165,12 +167,38 @@ export class Viewport3D {
     const axisIndex = this._axisIndex(upAxis);
     const colors = [0x3b82f6, 0x8b5cf6, 0x10b981, 0xf59e0b, 0xef4444];
 
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    let planeW = 20;
+    let planeH = 20;
+
+    if (bounds && bounds.min && bounds.max) {
+      cx = (bounds.min.x + bounds.max.x) * 0.5;
+      cy = (bounds.min.y + bounds.max.y) * 0.5;
+      cz = (bounds.min.z + bounds.max.z) * 0.5;
+      const sx = Math.max(1, bounds.max.x - bounds.min.x);
+      const sy = Math.max(1, bounds.max.y - bounds.min.y);
+      const sz = Math.max(1, bounds.max.z - bounds.min.z);
+
+      if (axisIndex === 1) {
+        planeW = sx * 1.15;
+        planeH = sz * 1.15;
+      } else if (axisIndex === 2) {
+        planeW = sx * 1.15;
+        planeH = sy * 1.15;
+      } else {
+        planeW = sz * 1.15;
+        planeH = sy * 1.15;
+      }
+    }
+
     floors.forEach((floor, i) => {
-      const geometry = new THREE.PlaneGeometry(20, 20);
+      const geometry = new THREE.PlaneGeometry(planeW, planeH);
       const material = new THREE.MeshBasicMaterial({
         color: colors[i % colors.length],
         transparent: true,
-        opacity: 0.15,
+        opacity: 0.16,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
@@ -178,14 +206,15 @@ export class Viewport3D {
 
       if (axisIndex === 1) {
         plane.rotation.x = -Math.PI / 2;
-        plane.position.y = floor.sliceHeight;
+        plane.position.set(cx, floor.sliceHeight, cz);
       } else if (axisIndex === 2) {
-        plane.position.z = floor.sliceHeight;
+        plane.position.set(cx, cy, floor.sliceHeight);
       } else {
         plane.rotation.y = Math.PI / 2;
-        plane.position.x = floor.sliceHeight;
+        plane.position.set(floor.sliceHeight, cy, cz);
       }
 
+      plane.visible = this.floorPlanesVisible;
       this.scene.add(plane);
       this.floorPlanes.push(plane);
 
@@ -193,14 +222,26 @@ export class Viewport3D {
       const wireMat = new THREE.LineBasicMaterial({
         color: colors[i % colors.length],
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.45,
       });
       const wireframe = new THREE.LineSegments(wireGeo, wireMat);
       wireframe.position.copy(plane.position);
       wireframe.rotation.copy(plane.rotation);
+      wireframe.visible = this.floorPlanesVisible;
       this.scene.add(wireframe);
       this.floorPlanes.push(wireframe);
     });
+  }
+
+  /**
+   * Toggle visibility of 3D floor slice planes.
+   * @param {boolean} visible
+   */
+  setFloorPlanesVisible(visible) {
+    this.floorPlanesVisible = Boolean(visible);
+    for (const obj of this.floorPlanes) {
+      obj.visible = this.floorPlanesVisible;
+    }
   }
 
   /**

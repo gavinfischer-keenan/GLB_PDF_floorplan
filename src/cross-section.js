@@ -1,4 +1,9 @@
 // Cross-section extraction: slices 3D meshes at a given height to produce 2D wall segments
+import * as THREE from 'three';
+import { MeshBVH, INTERSECTED, NOT_INTERSECTED } from 'three-mesh-bvh';
+import { simplifyWallSegments } from './utils/geometry.js';
+
+const BVH_TRIANGLE_THRESHOLD = 2000;
 
 /**
  * Computes and caches per-mesh world axis bounds when missing.
@@ -31,15 +36,68 @@ function getMeshBounds(mesh) {
 }
 
 /**
+ * Lazily constructs and caches a MeshBVH for large meshes without mutating original buffers.
+ * @param {Object} mesh
+ * @returns {{ bvh: MeshBVH, indices: Uint16Array | Uint32Array } | null}
+ */
+function getOrBuildBVH(mesh) {
+  if (mesh._bvhCache) return mesh._bvhCache;
+  const { positions, indices } = mesh;
+  if (!positions || !indices) return null;
+
+  const triCount = Math.floor(indices.length / 3);
+  if (triCount < BVH_TRIANGLE_THRESHOLD) return null;
+
+  const posArray = positions instanceof Float32Array ? positions : new Float32Array(positions);
+  const idxCopy = indices instanceof Uint32Array ? new Uint32Array(indices) : new Uint16Array(indices);
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+  geom.setIndex(new THREE.BufferAttribute(idxCopy, 1));
+
+  const bvh = new MeshBVH(geom);
+  mesh._bvhCache = {
+    bvh,
+    indices: geom.index.array,
+  };
+  return mesh._bvhCache;
+}
+
+/**
+ * Computes bounds for an array of 2D wall segments.
+ * @param {Array<[[number, number], [number, number]]>} segments
+ * @returns {{ minX: number, minY: number, maxX: number, maxY: number }}
+ */
+function computeSegmentsBounds(segments) {
+  if (!segments || segments.length === 0) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < segments.length; i++) {
+    const [a, b] = segments[i];
+    if (a[0] < minX) minX = a[0];
+    if (b[0] < minX) minX = b[0];
+    if (a[0] > maxX) maxX = a[0];
+    if (b[0] > maxX) maxX = b[0];
+    if (a[1] < minY) minY = a[1];
+    if (b[1] < minY) minY = b[1];
+    if (a[1] > maxY) maxY = a[1];
+    if (b[1] > maxY) maxY = b[1];
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+/**
  * Extracts a 2D cross-section from an array of 3D meshes by slicing at a given height.
- * Uses per-mesh bounding-box culling and zero-allocation triangle intersection math.
+ * Uses MeshBVH acceleration for large meshes, per-mesh bounds culling, and optional wall simplification.
  *
  * @param {Array<{positions: Float32Array, normals?: Float32Array, indices: Uint32Array|Uint16Array, bounds?: Object}>} meshes
  * @param {number} sliceHeight - The height at which to slice the meshes.
  * @param {string} upAxis - The up axis string ('+y', '-y', '+z', '-z', '+x', '-x').
+ * @param {{ simplifyEpsilon?: number }} [options]
  * @returns {{ segments: Array<[[number, number], [number, number]]>, bounds: {minX: number, minY: number, maxX: number, maxY: number} }}
  */
-export function extractCrossSection(meshes, sliceHeight, upAxis) {
+export function extractCrossSection(meshes, sliceHeight, upAxis, options = {}) {
   if (!meshes || meshes.length === 0) {
     return { segments: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
   }
@@ -56,18 +114,8 @@ export function extractCrossSection(meshes, sliceHeight, upAxis) {
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  for (let m = 0; m < meshes.length; m++) {
-    const mesh = meshes[m];
-    const { positions, indices } = mesh;
-    if (!positions || !indices || positions.length === 0) continue;
-
-    // Skip entire mesh if slice plane does not intersect its bounding box along the up axis
-    const meshBounds = getMeshBounds(mesh);
-    if (sliceHeight < meshBounds.min[axisIndex] || sliceHeight > meshBounds.max[axisIndex]) {
-      continue;
-    }
-
-    for (let i = 0; i < indices.length; i += 3) {
+  const intersectTriangleRange = (positions, indices, startIndexOffset, endIndexOffset) => {
+    for (let i = startIndexOffset; i < endIndexOffset; i += 3) {
       const idx0 = indices[i] * 3;
       const idx1 = indices[i + 1] * 3;
       const idx2 = indices[i + 2] * 3;
@@ -147,10 +195,48 @@ export function extractCrossSection(meshes, sliceHeight, upAxis) {
         }
       }
     }
+  };
+
+  for (let m = 0; m < meshes.length; m++) {
+    const mesh = meshes[m];
+    const { positions, indices } = mesh;
+    if (!positions || !indices || positions.length === 0) continue;
+
+    // Skip entire mesh if slice plane does not intersect its bounding box along the up axis
+    const meshBounds = getMeshBounds(mesh);
+    if (sliceHeight < meshBounds.min[axisIndex] || sliceHeight > meshBounds.max[axisIndex]) {
+      continue;
+    }
+
+    const bvhCache = getOrBuildBVH(mesh);
+    if (bvhCache) {
+      bvhCache.bvh.shapecast({
+        intersectsBounds: (box) => {
+          const boxMin = axisChar === 'x' ? box.min.x : axisChar === 'y' ? box.min.y : box.min.z;
+          const boxMax = axisChar === 'x' ? box.max.x : axisChar === 'y' ? box.max.y : box.max.z;
+          return sliceHeight >= boxMin && sliceHeight <= boxMax ? INTERSECTED : NOT_INTERSECTED;
+        },
+        intersectsRange: (offset, count) => {
+          intersectTriangleRange(positions, bvhCache.indices, offset * 3, (offset + count) * 3);
+          return false;
+        },
+      });
+    } else {
+      intersectTriangleRange(positions, indices, 0, indices.length);
+    }
   }
 
   if (rawSegments.length === 0) {
     return { segments: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
+  }
+
+  const simplifyEpsilon = typeof options.simplifyEpsilon === 'number' ? options.simplifyEpsilon : 0;
+  if (simplifyEpsilon > 0) {
+    const simplified = simplifyWallSegments(rawSegments, { simplifyEpsilon });
+    return {
+      segments: simplified,
+      bounds: computeSegmentsBounds(simplified),
+    };
   }
 
   return {

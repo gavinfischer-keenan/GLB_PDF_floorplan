@@ -4,17 +4,17 @@ const BIN_SIZE = 0.05;
 const DOT_THRESHOLD_SQ = 0.85 * 0.85;
 
 /**
- * Detects the single primary floor level in the 3D model.
- * Returns the lowest significant horizontal surface as the floor.
+ * Detects one or more floor levels in the 3D model using horizontal-face height histograms.
+ * Excludes top-most roof/ceiling surfaces when insufficient geometry exists above them.
  *
  * @param {Array} meshes - Array of meshes.
  * @param {string} upAxis - The detected up axis ('+y', '-y', '+z', etc.).
  * @param {{ sliceOffset?: number }} [options] - Optional slice offset above floor in meters.
- * @returns {{ name: string, floorHeight: number, ceilingHeight: number, sliceHeight: number } | null}
+ * @returns {Array<{ name: string, floorHeight: number, ceilingHeight: number, sliceHeight: number, sliceOffset: number }>}
  */
-export function detectFloor(meshes, upAxis, options = {}) {
+export function detectFloors(meshes, upAxis, options = {}) {
   if (!meshes || meshes.length === 0 || !upAxis) {
-    return null;
+    return [];
   }
 
   const sliceOffset = typeof options.sliceOffset === 'number' && options.sliceOffset > 0
@@ -26,10 +26,22 @@ export function detectFloor(meshes, upAxis, options = {}) {
   const axisIdx = axisDim === 'x' ? 0 : axisDim === 'y' ? 1 : 2;
 
   const signedHeights = [];
+  let maxSignedCoord = -Infinity;
 
   for (let m = 0; m < meshes.length; m++) {
-    const { positions, indices } = meshes[m];
+    const mesh = meshes[m];
+    const { positions, indices, bounds } = mesh;
     if (!positions) continue;
+
+    if (bounds && bounds.min && bounds.max) {
+      const meshMaxSigned = sign > 0 ? bounds.max[axisIdx] : -bounds.min[axisIdx];
+      if (meshMaxSigned > maxSignedCoord) maxSignedCoord = meshMaxSigned;
+    } else {
+      for (let v = axisIdx; v < positions.length; v += 3) {
+        const s = positions[v] * sign;
+        if (s > maxSignedCoord) maxSignedCoord = s;
+      }
+    }
 
     const numTriangles = indices ? Math.floor(indices.length / 3) : Math.floor(positions.length / 9);
     for (let i = 0; i < numTriangles; i++) {
@@ -74,46 +86,71 @@ export function detectFloor(meshes, upAxis, options = {}) {
     }
   }
 
-  if (signedHeights.length === 0) return null;
+  if (signedHeights.length === 0) return [];
 
   const hist = buildHistogram(signedHeights, BIN_SIZE);
   const smoothedHist = smoothHistogram(hist, 2, BIN_SIZE);
   const peaks = findPeaks(smoothedHist, Math.max(3, signedHeights.length * 0.003), 0.3);
 
   if (!peaks || peaks.length === 0) {
-    // Use lowest height along the signed up-axis so negative up-axes compute the true floor
     let minSigned = signedHeights[0];
     for (let i = 1; i < signedHeights.length; i++) {
       if (signedHeights[i] < minSigned) minSigned = signedHeights[i];
     }
     const floorRaw = minSigned * sign;
-    return {
-      name: 'Floor 1',
-      floorHeight: floorRaw,
-      ceilingHeight: floorRaw + sign * 3.0,
-      sliceHeight: floorRaw + sign * sliceOffset,
-    };
+    return [
+      {
+        name: 'Floor 1',
+        floorHeight: floorRaw,
+        ceilingHeight: floorRaw + sign * 3.0,
+        sliceHeight: floorRaw + sign * sliceOffset,
+        sliceOffset,
+      },
+    ];
   }
 
   peaks.sort((a, b) => a.value - b.value);
 
-  const floorPeak = peaks[0];
-  const floorRaw = floorPeak.value * sign;
-
-  // Try to find a ceiling peak 2.0-4.5m above the floor
-  let ceilingRaw = floorRaw + sign * 3.0;
-  for (let j = 1; j < peaks.length; j++) {
-    const diff = peaks[j].value - floorPeak.value;
-    if (diff >= 2.0 && diff <= 4.5) {
-      ceilingRaw = peaks[j].value * sign;
-      break;
+  const floorPeaks = [peaks[0]];
+  for (let i = 1; i < peaks.length; i++) {
+    const candidate = peaks[i];
+    const lastFloor = floorPeaks[floorPeaks.length - 1];
+    // Accept additional stories only when separated by >= 2.0m and with >= 1.2m of walls/structure above
+    if (candidate.value - lastFloor.value >= 2.0 && maxSignedCoord - candidate.value >= 1.2) {
+      floorPeaks.push(candidate);
     }
   }
 
-  return {
-    name: 'Floor 1',
-    floorHeight: floorRaw,
-    ceilingHeight: ceilingRaw,
-    sliceHeight: floorRaw + sign * sliceOffset,
-  };
+  return floorPeaks.map((fp, idx) => {
+    const floorRaw = fp.value * sign;
+    let ceilingRaw = floorRaw + sign * 3.0;
+    for (let j = 0; j < peaks.length; j++) {
+      const diff = peaks[j].value - fp.value;
+      if (diff >= 2.0 && diff <= 4.5) {
+        ceilingRaw = peaks[j].value * sign;
+        break;
+      }
+    }
+    return {
+      name: `Floor ${idx + 1}`,
+      floorHeight: floorRaw,
+      ceilingHeight: ceilingRaw,
+      sliceHeight: floorRaw + sign * sliceOffset,
+      sliceOffset,
+    };
+  });
+}
+
+/**
+ * Detects the single primary floor level in the 3D model.
+ * Returns the lowest significant horizontal surface as the floor.
+ *
+ * @param {Array} meshes - Array of meshes.
+ * @param {string} upAxis - The detected up axis ('+y', '-y', '+z', etc.).
+ * @param {{ sliceOffset?: number }} [options] - Optional slice offset above floor in meters.
+ * @returns {{ name: string, floorHeight: number, ceilingHeight: number, sliceHeight: number, sliceOffset: number } | null}
+ */
+export function detectFloor(meshes, upAxis, options = {}) {
+  const floors = detectFloors(meshes, upAxis, options);
+  return floors[0] || null;
 }
